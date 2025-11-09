@@ -183,9 +183,36 @@ docker compose up -d
   - `config/` - 各サービス設定（postfix, dovecot, nginx等）
   - `scripts/` - 運用スクリプト（backup, restore, scan）
   - `terraform/` - EC2 MX Gateway (IaC)
-  - `terraform-backup-s3/` - S3 Backup Infrastructure (IaC)
+  - `terraform/s3-backup/` - S3 Backup Infrastructure (IaC)
   - `usermgmt/` - Flask User Management App
 - `services/mailserver/troubleshoot/` - トラブルシューティング
+
+## 🔧 よく使うコマンド
+
+### Docker操作
+```bash
+cd /opt/onprem-infra-system/project-root-infra/services/mailserver
+docker compose ps
+docker compose logs -f postfix
+docker compose restart <service>
+docker compose exec postfix bash
+```
+
+### バックアップ確認
+```bash
+tail -f ~/.mailserver-backup.log
+tail -f ~/.s3-backup-cron.log
+tail -f ~/.scan-cron.log
+ls -lah /mnt/backup-hdd/mailserver/daily/
+```
+
+### Terraform操作（S3 Backup）
+```bash
+cd services/mailserver/terraform/s3-backup
+terraform plan
+terraform apply
+terraform output
+```
 
 ---
 
