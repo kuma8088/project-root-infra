@@ -1,0 +1,149 @@
+# Blog system Docker Compose configuration
+# Version: 1.0
+# Updated: 2025-11-08
+# Network: 172.22.0.0/24 (staging mailserver uses 172.21.0.0/24)
+
+networks:
+  blog_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+          gateway: 172.22.0.1
+
+volumes:
+  blog_db_data:
+    driver: local
+  blog_logs:
+    driver: local
+  blog_wordpress_sites:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/backup-hdd/blog/sites
+
+services:
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: blog-cloudflared
+    hostname: cloudflared
+    restart: always
+    networks:
+      blog_network:
+        ipv4_address: 172.22.0.10
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx (reverse proxy + virtual hosts)
+  nginx:
+    image: nginx:1.26-alpine
+    container_name: blog-nginx
+    hostname: nginx
+    restart: always
+    networks:
+      blog_network:
+        ipv4_address: 172.22.0.20
+    ports:
+      - "8080:80"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/conf.d:/etc/nginx/conf.d:ro
+      - blog_wordpress_sites:/var/www/html:ro
+      - blog_logs:/var/log/nginx
+    depends_on:
+      - wordpress
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # WordPress (PHP-FPM)
+  wordpress:
+    image: wordpress:php8.3-fpm-alpine
+    container_name: blog-wordpress
+    hostname: wordpress
+    restart: always
+    networks:
+      blog_network:
+        ipv4_address: 172.22.0.30
+    environment:
+      - TZ=${TZ:-Asia/Tokyo}
+      - WORDPRESS_DB_HOST=mariadb:3306
+      - WORDPRESS_DB_USER=${MYSQL_USER}
+      - WORDPRESS_DB_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - blog_wordpress_sites:/var/www/html
+      - ./config/php/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+      - blog_logs:/var/log/php
+    depends_on:
+      - mariadb
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm -t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MariaDB (multiple independent databases)
+  mariadb:
+    image: mariadb:10.11
+    container_name: blog-mariadb
+    hostname: mariadb
+    restart: always
+    networks:
+      blog_network:
+        ipv4_address: 172.22.0.50
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - TZ=${TZ:-Asia/Tokyo}
+    volumes:
+      - blog_db_data:/var/lib/mysql
+      - ./config/mariadb/init:/docker-entrypoint-initdb.d:ro
+      - ./config/mariadb/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      - blog_logs:/var/log/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max_connections=200
+      --innodb_buffer_pool_size=1G
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
