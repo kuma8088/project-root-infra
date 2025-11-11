@@ -8,6 +8,41 @@
 
 ---
 
+## 🚀 作業順序クイックリファレンス
+
+### 正しい作業順序（必読）
+
+```
+1. Cloudflare Tunnel Public Hostname追加 ← 最初
+   └─ 新ドメインのルーティング確立
+
+2. Nginx設定変更 (server_name変更)
+   └─ Nginxが新ドメインを処理可能に
+
+3. Nginx reload
+   └─ 設定を反映
+
+4. WordPress URL置換 (wp search-replace)
+   └─ データベース内URLを新ドメインに変更
+
+5. Elementorキャッシュクリア
+   └─ キャッシュされたURLをクリア
+
+6. 動作確認
+   └─ 新ドメインで正常動作を確認
+
+7. 301リダイレクト設定
+   └─ 旧URL → 新URL自動転送
+```
+
+### 重要な注意事項
+
+- ✅ **Cloudflare DNS変更は不要**: Public Hostname追加で自動設定
+- ✅ **作業はCloudflare Tunnel設定から**: Nginx設定変更の前に実施
+- ❌ **DNS A/CNAMEレコード手動追加は不要**: Cloudflare Zero Trust Dashboardで完結
+
+---
+
 ## 📋 目次
 
 1. [概要](#概要)
@@ -86,10 +121,14 @@ Phase A-1で構築したテスト環境（`blog.*` サブドメイン）から�
 
 ### 1. I009完了必須
 
-- [ ] 全14サイトの動作確認完了
-- [ ] Elementor Pro ライセンス状態確認完了
-- [ ] 有料プラグインライセンス確認完了
+- [x] 全14サイトの動作確認完了
+- [x] Elementor Pro ライセンス状態確認完了
+- [x] 有料プラグインライセンス確認完了
 - [ ] PHP互換性問題の修正完了（camera.kuma8088.com等）
+  - **注記**: cameramanualサイトは優先度Lowのため、移行後に対処
+  - **問題**: 古いテーマ（sinka）が `create_function()` 等のPHP 8.x非対応関数を使用
+  - **影響**: 現在PHP 7.4で動作中のため移行自体に影響なし
+  - **対処時期**: Phase A-2完了後、PHP 8.x移行時に対処
 
 ### 2. バックアップ取得
 
@@ -98,13 +137,39 @@ Phase A-1で構築したテスト環境（`blog.*` サブドメイン）から�
 - [ ] Nginx設定ファイルのバックアップ
 - [ ] Cloudflare Tunnel設定のスクリーンショット保存
 
-### 3. DNS TTL短縮（移行24時間前）
+**推奨コマンド**: Phase 0の0.2を参照
 
-- [ ] Cloudflare DNS設定でTTLを300秒に短縮
+### 3. DNS TTL短縮（移行24時間前）- **オプション**
+
+- [ ] Cloudflare DNS設定でTTLを300秒に短縮（Cloudflare Tunnel使用時はオプション）
+  - **注記**: Public Hostname追加で自動的にDNS設定されるため、このステップは省略可能
+  - **推奨**: 念のため既存blog.*サブドメインのTTLを短縮（ロールバック時の影響最小化）
 
 ---
 
 ## 🎯 移行戦略
+
+### 🔄 作業順序の原則（重要）
+
+**正しい順序**:
+1. **Cloudflare Tunnel Public Hostname追加** ← **最初**
+2. **Nginx設定変更** (server_name変更)
+3. **Nginx reload**
+4. **WordPress URL置換**
+5. **Elementorキャッシュクリア**
+6. **動作確認**
+7. **301リダイレクト設定**
+
+**重要事項**:
+- ✅ **Cloudflare DNS変更は不要**: Tunnel Public Hostnameを追加すると自動的にDNSルーティングが設定されます
+- ✅ **Cloudflare Tunnel設定を先に**: 新しいドメインへのルーティングを確立してからNginx設定を変更
+- ✅ **Nginx設定変更は後**: Cloudflare Tunnelが新ドメインを受け付けた後にNginxが対応
+- ❌ **DNS A/CNAMEレコード手動追加は不要**: Cloudflare Zero Trust Dashboardで完結
+
+**理由**:
+- Cloudflare Tunnelを使用している場合、Public Hostnameの追加だけでCloudflareが自動的に該当ドメインへのトラフィックをTunnelにルーティングします
+- 従来のDNS設定（A/CNAMEレコード手動追加）は不要です
+- Nginx設定変更前にCloudflare Tunnel設定を完了させることで、Nginx reloadと同時に新ドメインが動作可能になります
 
 ### 段階的移行（推奨）
 
@@ -131,17 +196,28 @@ Phase A-1で構築したテスト環境（`blog.*` サブドメイン）から�
 
 ### Phase 0: 事前準備（D-1日）
 
-#### 0.1 DNS TTL短縮
+#### 0.1 DNS TTL短縮（オプション）
+
+**注意**: Cloudflare Tunnelを使用している場合、Public Hostname追加で自動的にDNS設定されるため、このステップは**オプション**です。
+
+ただし、念のため既存のblog.*サブドメインのTTLを短縮しておくことを推奨します（ロールバック時の影響を最小化）。
 
 ```bash
 # Cloudflare Dashboard で実施
-# DNS → Records → 各レコードのTTLを300秒に変更
-# - blog.fx-trader-life.com (CNAME)
-# - blog.webmakeprofit.org (CNAME)
-# - blog.webmakesprofit.com (CNAME)
-# - blog.toyota-phv.jp (CNAME)
-# - blog.kuma8088.com (CNAME)
+# DNS → Records → 各レコードを確認（自動作成されたレコード）
+# blog.fx-trader-life.com (CNAME または Tunnel routing)
+# blog.webmakeprofit.org (CNAME または Tunnel routing)
+# blog.webmakesprofit.com (CNAME または Tunnel routing)
+# blog.toyota-phv.jp (CNAME または Tunnel routing)
+# blog.kuma8088.com (CNAME または Tunnel routing)
+
+# TTLを300秒に短縮（自動作成されたレコードのTTL変更は通常不要）
 ```
+
+**Cloudflare Tunnelの場合の確認事項**:
+- Zero Trust Dashboard → Networks → Tunnels → blog-tunnel → Configure
+- Public Hostnames タブで現在のホスト名を確認
+- 新しいホスト名追加時に自動的にDNSルーティングが設定されます
 
 #### 0.2 完全バックアップ
 
@@ -165,15 +241,31 @@ docker compose exec mariadb bash -c '
 docker cp blog-mariadb:/tmp/pre-migration-backup /mnt/backup-hdd/blog/backups/pre-migration-$(date +%Y%m%d)
 
 # 3. WordPressファイルのスナップショット
-tar -czf /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz \
-  /mnt/backup-hdd/blog/sites/
+# 注: wp-config.phpの所有者が82:82 (www-data)、パーミッション600のため、sudoが必要
+sudo tar -czf /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz \
+  -C /mnt/backup-hdd/blog/sites/ .
 
 # 4. Nginx設定バックアップ
 cp -r config/nginx /mnt/backup-hdd/blog/backups/nginx-pre-migration-$(date +%Y%m%d)
 
 # 5. バックアップ確認
+echo "=== データベースバックアップ確認 ==="
 ls -lh /mnt/backup-hdd/blog/backups/pre-migration-$(date +%Y%m%d)/
+echo "データベース数: $(ls -1 /mnt/backup-hdd/blog/backups/pre-migration-$(date +%Y%m%d)/*.sql 2>/dev/null | wc -l)"
+
+echo -e "\n=== WordPressファイルバックアップ確認 ==="
 ls -lh /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz
+# tarアーカイブの内容検証（最初の20ファイルを表示）
+tar -tzf /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz | head -20
+
+echo -e "\n=== Nginx設定バックアップ確認 ==="
+ls -lh /mnt/backup-hdd/blog/backups/nginx-pre-migration-$(date +%Y%m%d)/
+ls -1 /mnt/backup-hdd/blog/backups/nginx-pre-migration-$(date +%Y%m%d)/conf.d/
+
+echo -e "\n=== バックアップサイズサマリー ==="
+du -sh /mnt/backup-hdd/blog/backups/pre-migration-$(date +%Y%m%d)/
+du -sh /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz
+du -sh /mnt/backup-hdd/blog/backups/nginx-pre-migration-$(date +%Y%m%d)/
 ```
 
 ---
@@ -184,7 +276,9 @@ ls -lh /mnt/backup-hdd/blog/backups/sites-pre-migration-$(date +%Y%m%d).tar.gz
 
 このサイトで全手順を検証します。
 
-#### 1.1 Cloudflare Tunnel Public Hostname追加
+#### 1.1 Cloudflare Tunnel Public Hostname追加（最初のステップ）
+
+**重要**: この設定により、Cloudflareが自動的にDNSルーティングを設定します。手動でDNS A/CNAMEレコードを追加する必要はありません。
 
 ```
 Zero Trust Dashboard:
@@ -199,9 +293,18 @@ https://one.dash.cloudflare.com/
 - Path: (空欄)
 - Service: HTTP
 - URL: nginx:80
-- HTTP Host Header: demo1.kuma8088.com (Optional)
+- HTTP Host Header: (空欄 または demo1.kuma8088.com)
 
 3. Save hostname
+
+設定後の確認:
+- Public Hostnamesリストに demo1.kuma8088.com が表示されることを確認
+- Statusが "Healthy" になるまで数秒待機
+
+注意事項:
+- 保存後、数秒〜数分でDNS伝播が完了します（通常は即座）
+- dig demo1.kuma8088.com で Cloudflare IPが返ることを確認可能
+- Cloudflare Dashboard → DNS → Records には自動的にレコードが追加されます
 ```
 
 #### 1.2 Nginx新規仮想ホスト作成
@@ -269,10 +372,22 @@ docker compose exec nginx nginx -s reload
 
 #### 1.3 WordPress URL置換
 
+**重要**: WordPressのsiteurl/homeは通常HTTPSで保存されているため、HTTPS版を先に実行します。
+
 ```bash
 cd /opt/onprem-infra-system/project-root-infra/services/blog
 
-# dry-run（変更なし、確認のみ）
+# 1. HTTPS版のdry-run（メイン: siteurl/home等を含む）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/elementordemo1' \
+  'https://demo1.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementordemo1 \
+  --all-tables \
+  --skip-columns=guid \
+  --dry-run \
+  --allow-root
+
+# 2. HTTP版のdry-run（念のため: post_content内ハードコードURL用）
 docker compose exec wordpress wp search-replace \
   'http://blog.kuma8088.com/elementordemo1' \
   'https://demo1.kuma8088.com' \
@@ -282,18 +397,9 @@ docker compose exec wordpress wp search-replace \
   --dry-run \
   --allow-root
 
-# 出力を確認: "X replacements" の数を記録
+# 出力を確認: 両方の "X replacements" の数を記録
 
-# 問題なければ本実行
-docker compose exec wordpress wp search-replace \
-  'http://blog.kuma8088.com/elementordemo1' \
-  'https://demo1.kuma8088.com' \
-  --path=/var/www/html/kuma8088-elementordemo1 \
-  --all-tables \
-  --skip-columns=guid \
-  --allow-root
-
-# HTTPSも置換（念のため）
+# 3. HTTPS版の本実行
 docker compose exec wordpress wp search-replace \
   'https://blog.kuma8088.com/elementordemo1' \
   'https://demo1.kuma8088.com' \
@@ -302,7 +408,16 @@ docker compose exec wordpress wp search-replace \
   --skip-columns=guid \
   --allow-root
 
-# データベース直接確認
+# 4. HTTP版の本実行
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/elementordemo1' \
+  'https://demo1.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementordemo1 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# 5. データベース直接確認
 docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
   SELECT option_value
   FROM wp_kuma8088_elementordemo1.wp_options
@@ -347,40 +462,46 @@ curl -I https://demo1.kuma8088.com
 
 既存URL（`blog.kuma8088.com/elementordemo1`）でアクセスするユーザーを新URLへ自動転送します。
 
+**方針**:
+- kuma8088-subdirs-generated.inc から該当サイトの設定を削除
+- kuma8088.conf に301リダイレクトを追加
+
 ```bash
 cd /opt/onprem-infra-system/project-root-infra/services/blog
 
-# kuma8088.confの既存locationブロックを削除し、リダイレクト設定を追加
-# 既存のkuma8088.confをバックアップ
-cp config/nginx/conf.d/kuma8088.conf config/nginx/conf.d/kuma8088.conf.bak
+# 1. 自動生成ファイルをバックアップ
+cp config/nginx/conf.d/kuma8088-subdirs-generated.inc \
+   config/nginx/conf.d/kuma8088-subdirs-generated.inc.pre-demo1
 
-# 既存のelementordemo1関連locationブロックを削除（手動編集）
-# または以下のスクリプトで自動削除（要注意: 必ず事前にバックアップ取得済み）
+# 2. elementordemo1関連の設定を削除（29行から57行までを削除）
+sed -i '30,57d' config/nginx/conf.d/kuma8088-subdirs-generated.inc
 
-# 手動編集を推奨:
-# config/nginx/conf.d/kuma8088.conf を開き、
-# location /elementordemo1 {...} ブロック全体を削除
+# 削除内容確認（elementordemo1が含まれないこと）
+grep -n "elementordemo1" config/nginx/conf.d/kuma8088-subdirs-generated.inc
+# 期待値: 何も出力されない（削除成功）
 
-# 301リダイレクト設定を追加
-# kuma8088.confのserver{}ブロック内に以下を追加:
-cat >> config/nginx/conf.d/kuma8088.conf <<'EOF'
+# 3. kuma8088.confに301リダイレクトを追加
+# includeディレクティブの直後に追加
+sed -i '/include .*kuma8088-subdirs-generated.inc;/a\
+\
+    # Redirect old elementordemo1 path to new subdomain\
+    location /elementordemo1 {\
+        return 301 https://demo1.kuma8088.com$request_uri;\
+    }\
+    location /elementordemo1/ {\
+        return 301 https://demo1.kuma8088.com$request_uri;\
+    }' config/nginx/conf.d/kuma8088.conf
 
-    # Redirect old elementordemo1 path to new subdomain
-    location /elementordemo1 {
-        return 301 https://demo1.kuma8088.com$request_uri;
-    }
-    location /elementordemo1/ {
-        return 301 https://demo1.kuma8088.com$request_uri;
-    }
-EOF
+# 追加内容確認
+grep -A 6 "Redirect old elementordemo1" config/nginx/conf.d/kuma8088.conf
 
-# 設定テスト
+# 4. 設定テスト
 docker compose exec nginx nginx -t
 
-# Nginxリロード
+# 5. Nginxリロード
 docker compose exec nginx nginx -s reload
 
-# リダイレクトテスト
+# 6. リダイレクトテスト
 curl -I https://blog.kuma8088.com/elementordemo1
 # 期待値:
 # HTTP/1.1 301 Moved Permanently
@@ -391,6 +512,8 @@ curl -I https://blog.kuma8088.com/elementordemo1/
 # HTTP/1.1 301 Moved Permanently
 # Location: https://demo1.kuma8088.com/elementordemo1/
 ```
+
+**注意**: スクリプト `generate-nginx-subdirectories.sh` を再実行する場合は、elementordemo1を除外するよう修正が必要です。
 
 #### 1.7 テスト移行の評価
 
@@ -434,31 +557,65 @@ Zero Trust Dashboard:
 
 ##### 2.2 Nginx設定変更
 
+**方針**:
+- 既存server{}ブロックの `server_name` を本番ドメインに変更
+- 旧ドメイン（blog.*）からのリダイレクト用server{}ブロックを追加
+
 ```bash
 cd /opt/onprem-infra-system/project-root-infra/services/blog
 
 # 既存設定をバックアップ
 cp config/nginx/conf.d/fx-trader-life.conf config/nginx/conf.d/fx-trader-life.conf.pre-migration
 
-# server_name を変更
+# 1. server_name を本番ドメインに変更
 sed -i 's/server_name blog\.fx-trader-life\.com;/server_name fx-trader-life.com www.fx-trader-life.com;/' \
   config/nginx/conf.d/fx-trader-life.conf
 
-# 設定確認
-grep "server_name" config/nginx/conf.d/fx-trader-life.conf
-# 期待値: server_name fx-trader-life.com www.fx-trader-life.com;
+# 2. 旧ドメインリダイレクト用server{}ブロックを追加
+cat >> config/nginx/conf.d/fx-trader-life.conf <<'EOF'
 
-# 設定テスト
+# Redirect old domain to production domain
+server {
+    listen 80;
+    server_name blog.fx-trader-life.com;
+    return 301 https://fx-trader-life.com$request_uri;
+}
+EOF
+
+# 3. 設定確認
+echo "=== server_name 確認 ==="
+grep "server_name" config/nginx/conf.d/fx-trader-life.conf
+# 期待値:
+#   server_name fx-trader-life.com www.fx-trader-life.com;
+#   server_name blog.fx-trader-life.com;
+
+# 4. 設定テスト
 docker compose exec nginx nginx -t
 
-# Nginxリロード
+# 5. Nginxリロード
 docker compose exec nginx nginx -s reload
+
+# 6. リダイレクトテスト
+curl -I https://blog.fx-trader-life.com
+# 期待値:
+# HTTP/1.1 301 Moved Permanently
+# Location: https://fx-trader-life.com/
 ```
 
 ##### 2.3 WordPress URL置換
 
 ```bash
-# dry-run
+# 1. HTTPS版のdry-run（メイン: siteurl/home等を含む）
+docker compose exec wordpress wp search-replace \
+  'https://blog.fx-trader-life.com' \
+  'https://fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life \
+  --all-tables \
+  --skip-columns=guid \
+  --dry-run \
+  --allow-root
+
+# 2. HTTP版のdry-run（念のため: post_content内ハードコードURL用）
 docker compose exec wordpress wp search-replace \
   'http://blog.fx-trader-life.com' \
   'https://fx-trader-life.com' \
@@ -468,16 +625,9 @@ docker compose exec wordpress wp search-replace \
   --dry-run \
   --allow-root
 
-# 本実行
-docker compose exec wordpress wp search-replace \
-  'http://blog.fx-trader-life.com' \
-  'https://fx-trader-life.com' \
-  --path=/var/www/html/fx-trader-life \
-  --all-tables \
-  --skip-columns=guid \
-  --allow-root
+# 出力を確認: 両方の "X replacements" の数を記録
 
-# HTTPSも置換
+# 3. HTTPS版の本実行
 docker compose exec wordpress wp search-replace \
   'https://blog.fx-trader-life.com' \
   'https://fx-trader-life.com' \
@@ -486,7 +636,16 @@ docker compose exec wordpress wp search-replace \
   --skip-columns=guid \
   --allow-root
 
-# 確認
+# 4. HTTP版の本実行
+docker compose exec wordpress wp search-replace \
+  'http://blog.fx-trader-life.com' \
+  'https://fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# 5. データベース直接確認
 docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
   SELECT option_value
   FROM wp_fx_trader_life.wp_options
@@ -520,45 +679,7 @@ curl -I https://fx-trader-life.com
 # https://fx-trader-life.com にアクセス
 ```
 
-##### 2.6 旧URL → 新URL 301リダイレクト設定
-
-```bash
-cd /opt/onprem-infra-system/project-root-infra/services/blog
-
-# blog.fx-trader-life.com用のリダイレクト専用server{}ブロック作成
-cat > config/nginx/conf.d/fx-trader-life-redirect.conf <<'EOF'
-# Redirect old blog subdomain to production domain
-server {
-    listen 80;
-    server_name blog.fx-trader-life.com;
-
-    access_log /var/log/nginx/fx-trader-life-redirect-access.log;
-
-    # Redirect all requests to production domain
-    location / {
-        return 301 https://fx-trader-life.com$request_uri;
-    }
-}
-EOF
-
-# 設定テスト
-docker compose exec nginx nginx -t
-
-# Nginxリロード
-docker compose exec nginx nginx -s reload
-
-# リダイレクトテスト
-curl -I https://blog.fx-trader-life.com
-# 期待値:
-# HTTP/1.1 301 Moved Permanently
-# Location: https://fx-trader-life.com/
-
-curl -I https://blog.fx-trader-life.com/some-page/
-# 期待値:
-# Location: https://fx-trader-life.com/some-page/
-```
-
-##### 2.7 24時間安定動作監視
+##### 2.6 24時間安定動作監視
 
 ```bash
 # 翌日、エラーログ確認
@@ -570,26 +691,87 @@ docker compose exec nginx tail -100 /var/log/nginx/fx-trader-life-redirect-acces
 
 ---
 
-#### サイト2-5: 同様の手順を繰り返し
+#### サイト2: blog.webmakeprofit.org → webmakeprofit.org
 
-**以下のサイトで2.1〜2.7を実施**:
+##### 2.1 Cloudflare Tunnel Public Hostname追加
 
-**サイト2: blog.webmakeprofit.org → webmakeprofit.org**
+```
+Zero Trust Dashboard:
+1. Networks → Tunnels → blog-tunnel → Configure
+2. Public Hostnames → Add a public hostname
+
+設定:
+- Subdomain: (空欄)
+- Domain: webmakeprofit.org
+- Path: (空欄)
+- Service: HTTP
+- URL: nginx:80
+
+3. Save hostname
+```
+
+##### 2.2 Nginx設定変更
+
 ```bash
-# 2.1 Cloudflare Tunnel Public Hostname追加: webmakeprofit.org
-# 2.2 Nginx設定変更
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+
+# 既存設定をバックアップ
+cp config/nginx/conf.d/webmakeprofit.conf config/nginx/conf.d/webmakeprofit.conf.pre-migration
+
+# 1. server_name を本番ドメインに変更
 sed -i 's/server_name blog\.webmakeprofit\.org;/server_name webmakeprofit.org www.webmakeprofit.org;/' \
   config/nginx/conf.d/webmakeprofit.conf
 
-# 2.3 WordPress URL置換
+# 2. 旧ドメインリダイレクト用server{}ブロックを追加
+cat >> config/nginx/conf.d/webmakeprofit.conf <<'EOF'
+
+# Redirect old domain to production domain
+server {
+    listen 80;
+    server_name blog.webmakeprofit.org;
+    return 301 https://webmakeprofit.org$request_uri;
+}
+EOF
+
+# 3. 設定確認
+grep "server_name" config/nginx/conf.d/webmakeprofit.conf
+
+# 4. 設定テスト
+docker compose exec nginx nginx -t
+
+# 5. Nginxリロード
+docker compose exec nginx nginx -s reload
+
+# 6. リダイレクトテスト
+curl -I https://blog.webmakeprofit.org
+```
+
+##### 2.3 WordPress URL置換
+
+```bash
+# 1. HTTPS版のdry-run（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.webmakeprofit.org' \
+  'https://webmakeprofit.org' \
+  --path=/var/www/html/webmakeprofit \
+  --all-tables \
+  --skip-columns=guid \
+  --dry-run \
+  --allow-root
+
+# 2. HTTP版のdry-run（念のため）
 docker compose exec wordpress wp search-replace \
   'http://blog.webmakeprofit.org' \
   'https://webmakeprofit.org' \
   --path=/var/www/html/webmakeprofit \
   --all-tables \
   --skip-columns=guid \
+  --dry-run \
   --allow-root
 
+# 出力を確認: 両方の "X replacements" の数を記録
+
+# 3. HTTPS版の本実行
 docker compose exec wordpress wp search-replace \
   'https://blog.webmakeprofit.org' \
   'https://webmakeprofit.org' \
@@ -598,41 +780,224 @@ docker compose exec wordpress wp search-replace \
   --skip-columns=guid \
   --allow-root
 
-# 2.4 キャッシュクリア
+# 4. HTTP版の本実行
+docker compose exec wordpress wp search-replace \
+  'http://blog.webmakeprofit.org' \
+  'https://webmakeprofit.org' \
+  --path=/var/www/html/webmakeprofit \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# 5. データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_webmakeprofit.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+# 期待値: https://webmakeprofit.org
+```
+
+##### 2.4 キャッシュクリア
+
+```bash
 docker compose exec wordpress wp elementor flush-css \
   --path=/var/www/html/webmakeprofit \
   --allow-root
 
-# 2.5 動作確認
+docker compose exec wordpress wp cache flush \
+  --path=/var/www/html/webmakeprofit \
+  --allow-root
+```
+
+##### 2.5 動作確認
+
+```bash
+# DNS確認
+dig webmakeprofit.org +short
+
+# HTTPアクセス確認
 curl -I https://webmakeprofit.org
 
-# 2.6 301リダイレクト設定
-cat > config/nginx/conf.d/webmakeprofit-redirect.conf <<'EOF'
-server {
-    listen 80;
-    server_name blog.webmakeprofit.org;
-    location / {
-        return 301 https://webmakeprofit.org$request_uri;
-    }
-}
-EOF
+# ブラウザで動作確認
+# https://webmakeprofit.org にアクセス
 docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
 ```
 
-**サイト3: blog.webmakesprofit.com → webmakesprofit.com**
+---
+
+#### サイト3: blog.webmakesprofit.com → webmakesprofit.com
+
+**方針**: サイト2と同じ手順（Cloudflare Tunnel → Nginx設定変更+301リダイレクト → URL置換 → 動作確認）
+
 ```bash
-# 同様の手順（server_name, URL, pathを変更）
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+
+# Cloudflare Tunnel Public Hostname: webmakesprofit.com を追加
+
+# Nginx設定
+cp config/nginx/conf.d/webmakesprofit.conf config/nginx/conf.d/webmakesprofit.conf.pre-migration
+sed -i 's/server_name blog\.webmakesprofit\.com;/server_name webmakesprofit.com www.webmakesprofit.com;/' \
+  config/nginx/conf.d/webmakesprofit.conf
+
+cat >> config/nginx/conf.d/webmakesprofit.conf <<'EOF'
+
+# Redirect old domain to production domain
+server {
+    listen 80;
+    server_name blog.webmakesprofit.com;
+    return 301 https://webmakesprofit.com$request_uri;
+}
+EOF
+
+docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+
+# WordPress URL置換（dry-run→actual、HTTPS→HTTP順）
+docker compose exec wordpress wp search-replace \
+  'https://blog.webmakesprofit.com' 'https://webmakesprofit.com' \
+  --path=/var/www/html/webmakesprofit --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.webmakesprofit.com' 'https://webmakesprofit.com' \
+  --path=/var/www/html/webmakesprofit --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'https://blog.webmakesprofit.com' 'https://webmakesprofit.com' \
+  --path=/var/www/html/webmakesprofit --all-tables --skip-columns=guid --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.webmakesprofit.com' 'https://webmakesprofit.com' \
+  --path=/var/www/html/webmakesprofit --all-tables --skip-columns=guid --allow-root
+
+# DB確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value FROM wp_webmakesprofit.wp_options WHERE option_name IN ('siteurl', 'home');"
+
+# キャッシュクリア
+docker compose exec wordpress wp elementor flush-css --path=/var/www/html/webmakesprofit --allow-root
+docker compose exec wordpress wp cache flush --path=/var/www/html/webmakesprofit --allow-root
+
+# 動作確認
+curl -I https://webmakesprofit.com
+curl -I https://blog.webmakesprofit.com  # 301確認
 ```
 
-**サイト4: blog.toyota-phv.jp → toyota-phv.jp**
+---
+
+#### サイト4: blog.toyota-phv.jp → toyota-phv.jp
+
+**方針**: サイト2/3と同じ手順
+
 ```bash
-# 同様の手順（server_name, URL, pathを変更）
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+
+# Cloudflare Tunnel Public Hostname: toyota-phv.jp を追加
+
+# Nginx設定
+cp config/nginx/conf.d/toyota-phv.conf config/nginx/conf.d/toyota-phv.conf.pre-migration
+sed -i 's/server_name blog\.toyota-phv\.jp;/server_name toyota-phv.jp www.toyota-phv.jp;/' \
+  config/nginx/conf.d/toyota-phv.conf
+
+cat >> config/nginx/conf.d/toyota-phv.conf <<'EOF'
+
+# Redirect old domain to production domain
+server {
+    listen 80;
+    server_name blog.toyota-phv.jp;
+    return 301 https://toyota-phv.jp$request_uri;
+}
+EOF
+
+docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+
+# WordPress URL置換（dry-run→actual、HTTPS→HTTP順）
+docker compose exec wordpress wp search-replace \
+  'https://blog.toyota-phv.jp' 'https://toyota-phv.jp' \
+  --path=/var/www/html/toyota-phv --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.toyota-phv.jp' 'https://toyota-phv.jp' \
+  --path=/var/www/html/toyota-phv --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'https://blog.toyota-phv.jp' 'https://toyota-phv.jp' \
+  --path=/var/www/html/toyota-phv --all-tables --skip-columns=guid --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.toyota-phv.jp' 'https://toyota-phv.jp' \
+  --path=/var/www/html/toyota-phv --all-tables --skip-columns=guid --allow-root
+
+# DB確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value FROM wp_toyota_phv.wp_options WHERE option_name IN ('siteurl', 'home');"
+
+# キャッシュクリア
+docker compose exec wordpress wp elementor flush-css --path=/var/www/html/toyota-phv --allow-root
+docker compose exec wordpress wp cache flush --path=/var/www/html/toyota-phv --allow-root
+
+# 動作確認
+curl -I https://toyota-phv.jp
+curl -I https://blog.toyota-phv.jp  # 301確認
 ```
 
-**サイト5: blog.kuma8088.com → kuma8088.com**
+---
+
+#### サイト5: blog.kuma8088.com → kuma8088.com
+
+**方針**: サイト2-4と同じ手順（ただしサブディレクトリリダイレクトは既に設定済み）
+
 ```bash
-# 同様の手順（server_name, URL, pathを変更）
-# 注意: kuma8088.comのサブディレクトリサイト（Phase 3）のリダイレクト設定は後で追加
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+
+# Cloudflare Tunnel Public Hostname: kuma8088.com を追加
+
+# Nginx設定
+cp config/nginx/conf.d/kuma8088.conf config/nginx/conf.d/kuma8088.conf.pre-migration
+sed -i 's/server_name blog\.kuma8088\.com;/server_name kuma8088.com www.kuma8088.com;/' \
+  config/nginx/conf.d/kuma8088.conf
+
+# 旧ドメインリダイレクト用serverブロックを追加（サブディレクトリリダイレクトの後に）
+cat >> config/nginx/conf.d/kuma8088.conf <<'EOF'
+
+# Redirect old domain to production domain
+server {
+    listen 80;
+    server_name blog.kuma8088.com;
+    return 301 https://kuma8088.com$request_uri;
+}
+EOF
+
+docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+
+# WordPress URL置換（dry-run→actual、HTTPS→HTTP順）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com' 'https://kuma8088.com' \
+  --path=/var/www/html/kuma8088 --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com' 'https://kuma8088.com' \
+  --path=/var/www/html/kuma8088 --all-tables --skip-columns=guid --dry-run --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com' 'https://kuma8088.com' \
+  --path=/var/www/html/kuma8088 --all-tables --skip-columns=guid --allow-root
+
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com' 'https://kuma8088.com' \
+  --path=/var/www/html/kuma8088 --all-tables --skip-columns=guid --allow-root
+
+# DB確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value FROM wp_kuma8088.wp_options WHERE option_name IN ('siteurl', 'home');"
+
+# キャッシュクリア
+docker compose exec wordpress wp elementor flush-css --path=/var/www/html/kuma8088 --allow-root
+docker compose exec wordpress wp cache flush --path=/var/www/html/kuma8088 --allow-root
+
+# 動作確認
+curl -I https://kuma8088.com
+curl -I https://blog.kuma8088.com  # 301確認（ルート）
+curl -I https://blog.kuma8088.com/elementordemo1  # 301確認（サブディレクトリ）
 ```
 
 ---
@@ -720,7 +1085,17 @@ docker compose exec nginx nginx -s reload
 ##### 3.3 WordPress URL置換
 
 ```bash
-# dry-run
+# 1. HTTPS版のdry-run（メイン: siteurl/home等を含む）
+docker compose exec wordpress wp search-replace \
+  'https://blog.fx-trader-life.com/MFKC' \
+  'https://mfkc.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-mfkc \
+  --all-tables \
+  --skip-columns=guid \
+  --dry-run \
+  --allow-root
+
+# 2. HTTP版のdry-run（念のため: post_content内ハードコードURL用）
 docker compose exec wordpress wp search-replace \
   'http://blog.fx-trader-life.com/MFKC' \
   'https://mfkc.fx-trader-life.com' \
@@ -730,16 +1105,9 @@ docker compose exec wordpress wp search-replace \
   --dry-run \
   --allow-root
 
-# 本実行
-docker compose exec wordpress wp search-replace \
-  'http://blog.fx-trader-life.com/MFKC' \
-  'https://mfkc.fx-trader-life.com' \
-  --path=/var/www/html/fx-trader-life-mfkc \
-  --all-tables \
-  --skip-columns=guid \
-  --allow-root
+# 出力を確認: 両方の "X replacements" の数を記録
 
-# HTTPSも置換
+# 3. HTTPS版の本実行
 docker compose exec wordpress wp search-replace \
   'https://blog.fx-trader-life.com/MFKC' \
   'https://mfkc.fx-trader-life.com' \
@@ -748,7 +1116,16 @@ docker compose exec wordpress wp search-replace \
   --skip-columns=guid \
   --allow-root
 
-# 確認
+# 4. HTTP版の本実行
+docker compose exec wordpress wp search-replace \
+  'http://blog.fx-trader-life.com/MFKC' \
+  'https://mfkc.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-mfkc \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# 5. データベース直接確認
 docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
   SELECT option_value
   FROM wp_fx_trader_life_mfkc.wp_options
@@ -778,71 +1155,51 @@ curl -I https://mfkc.fx-trader-life.com
 
 ##### 3.6 旧URL → 新URL 301リダイレクト設定
 
-**重要**: 既に fx-trader-life.com は本番移行済み（Phase 2）のため、
-旧サブディレクトリパス（`blog.fx-trader-life.com/MFKC`）のリダイレクトを追加します。
+**重要**: fx-trader-life.com は本番移行済み（Phase 2）のため、
+fx-trader-life.conf の**両方のserverブロック**にサブディレクトリリダイレクトを追加します。
+
+**方針**:
+- 本番ドメイン用serverブロック（fx-trader-life.com）に `/MFKC` リダイレクト追加
+- 旧ドメイン用serverブロック（blog.fx-trader-life.com）に `/MFKC` リダイレクト追加
 
 ```bash
 cd /opt/onprem-infra-system/project-root-infra/services/blog
 
-# fx-trader-life-redirect.conf（Phase 2で作成済み）に追加
-# 既存の "location / { return 301 ... }" の前に以下を挿入:
+# fx-trader-life.confの本番ドメインserverブロックに追加
+# location / の前に挿入（sedで自動挿入）
+sed -i '/location \/ {/i\
+\
+    # Redirect MFKC subdirectory to subdomain\
+    location /MFKC {\
+        return 301 https://mfkc.fx-trader-life.com$request_uri;\
+    }\
+    location /MFKC/ {\
+        return 301 https://mfkc.fx-trader-life.com$request_uri;\
+    }' config/nginx/conf.d/fx-trader-life.conf
 
-cat > /tmp/mfkc-redirect.conf <<'EOF'
+# 旧ドメインserverブロックにも追加
+# return 301 の前に挿入
+sed -i '/server_name blog\.fx-trader-life\.com;/a\
+\
+    # Redirect MFKC subdirectory to subdomain\
+    location /MFKC {\
+        return 301 https://mfkc.fx-trader-life.com$request_uri;\
+    }\
+    location /MFKC/ {\
+        return 301 https://mfkc.fx-trader-life.com$request_uri;\
+    }' config/nginx/conf.d/fx-trader-life.conf
 
-    # Redirect old MFKC subdirectory path to new subdomain
-    location /MFKC {
-        return 301 https://mfkc.fx-trader-life.com$request_uri;
-    }
-    location /MFKC/ {
-        return 301 https://mfkc.fx-trader-life.com$request_uri;
-    }
-EOF
+# 設定確認
+grep -A 3 "Redirect MFKC" config/nginx/conf.d/fx-trader-life.conf
 
-# 手動でfx-trader-life-redirect.confを編集し、上記を挿入
-# または以下のコマンドで自動挿入（要注意）
-
-# 手動編集を推奨:
-# config/nginx/conf.d/fx-trader-life-redirect.conf を開き、
-# location / { ... } の前に上記を追加
-
+# 設定テスト
 docker compose exec nginx nginx -t
 docker compose exec nginx nginx -s reload
 
 # リダイレクトテスト
-curl -I https://blog.fx-trader-life.com/MFKC
-# 期待値:
-# HTTP/1.1 301 Moved Permanently
-# Location: https://mfkc.fx-trader-life.com/MFKC
-
-curl -I https://blog.fx-trader-life.com/MFKC/
-# 期待値:
-# Location: https://mfkc.fx-trader-life.com/MFKC/
-
-# 新ドメイン（fx-trader-life.com）からのリダイレクトも追加
-# fx-trader-life.conf に以下を追加（rootサイトのlocation / の前に）:
-
-cat >> /tmp/mfkc-redirect-from-production.conf <<'EOF'
-
-    # Redirect MFKC path from production domain to subdomain
-    location /MFKC {
-        return 301 https://mfkc.fx-trader-life.com$request_uri;
-    }
-    location /MFKC/ {
-        return 301 https://mfkc.fx-trader-life.com$request_uri;
-    }
-EOF
-
-# config/nginx/conf.d/fx-trader-life.conf を編集し、上記を追加
-# ※ location / の前に配置すること
-
-docker compose exec nginx nginx -t
-docker compose exec nginx nginx -s reload
-
-# リダイレクトテスト（新ドメインから）
-curl -I https://fx-trader-life.com/MFKC
-# 期待値:
-# HTTP/1.1 301 Moved Permanently
-# Location: https://mfkc.fx-trader-life.com/MFKC
+curl -I https://blog.fx-trader-life.com/MFKC  # 旧ドメイン
+curl -I https://fx-trader-life.com/MFKC  # 本番ドメイン
+# 両方とも期待値: HTTP/1.1 301 ... Location: https://mfkc.fx-trader-life.com/MFKC
 ```
 
 ---
@@ -854,42 +1211,328 @@ curl -I https://fx-trader-life.com/MFKC
 **サイト7: blog.fx-trader-life.com/4-line-trade → 4line.fx-trader-life.com**
 ```bash
 # 3.1 Cloudflare Tunnel: 4line.fx-trader-life.com
-# 3.2 Nginx: config/nginx/conf.d/4line-fx-trader-life.conf 作成
-# 3.3 URL置換: http://blog.fx-trader-life.com/4-line-trade → https://4line.fx-trader-life.com
+# 3.2 Nginx: config/nginx/conf.d/4line-fx-trader-life.conf 作成（mfkcと同様）
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.fx-trader-life.com/4-line-trade' \
+  'https://4line.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-4line \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.fx-trader-life.com/4-line-trade' \
+  'https://4line.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-4line \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_fx_trader_life_4line.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
 # 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/fx-trader-life-4line \
+  --allow-root
+
 # 3.5 動作確認
-# 3.6 リダイレクト設定:
-#     - blog.fx-trader-life.com/4-line-trade → 4line.fx-trader-life.com
-#     - fx-trader-life.com/4-line-trade → 4line.fx-trader-life.com
+curl -I https://4line.fx-trader-life.com
+
+# 3.6 リダイレクト設定（Phase 2完了後、fx-trader-life-redirect.confに追加）
 ```
 
 **サイト8: blog.fx-trader-life.com/lp → lp.fx-trader-life.com**
 ```bash
-# 同様の手順
+# 3.1 Cloudflare Tunnel: lp.fx-trader-life.com
+# 3.2 Nginx: config/nginx/conf.d/lp-fx-trader-life.conf 作成
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.fx-trader-life.com/lp' \
+  'https://lp.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-lp \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.fx-trader-life.com/lp' \
+  'https://lp.fx-trader-life.com' \
+  --path=/var/www/html/fx-trader-life-lp \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_fx_trader_life_lp.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/fx-trader-life-lp \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://lp.fx-trader-life.com
 ```
 
 **サイト9: blog.webmakeprofit.org/coconala → coconala.webmakeprofit.org**
 ```bash
 # 3.1 Cloudflare Tunnel: coconala.webmakeprofit.org
 # 3.2 Nginx: config/nginx/conf.d/coconala-webmakeprofit.conf 作成
-# 3.3 URL置換: http://blog.webmakeprofit.org/coconala → https://coconala.webmakeprofit.org
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.webmakeprofit.org/coconala' \
+  'https://coconala.webmakeprofit.org' \
+  --path=/var/www/html/webmakeprofit-coconala \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.webmakeprofit.org/coconala' \
+  'https://coconala.webmakeprofit.org' \
+  --path=/var/www/html/webmakeprofit-coconala \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_webmakeprofit_coconala.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
 # 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/webmakeprofit-coconala \
+  --allow-root
+
 # 3.5 動作確認
-# 3.6 リダイレクト設定:
-#     - blog.webmakeprofit.org/coconala → coconala.webmakeprofit.org
-#     - webmakeprofit.org/coconala → coconala.webmakeprofit.org
+curl -I https://coconala.webmakeprofit.org
 ```
 
-**サイト10-15: kuma8088.com配下の6サイト**
+**サイト10: blog.kuma8088.com/cameramanual → camera.kuma8088.com**
 ```bash
-# 10. blog.kuma8088.com/cameramanual → camera.kuma8088.com
-# 11. blog.kuma8088.com/elementordemo1 → demo1.kuma8088.com （Phase 1で完了済み）
-# 12. blog.kuma8088.com/elementordemo02 → demo2.kuma8088.com
-# 13. blog.kuma8088.com/elementor-demo-03 → demo3.kuma8088.com
-# 14. blog.kuma8088.com/elementor-demo-04 → demo4.kuma8088.com
-# 15. blog.kuma8088.com/ec02test → ec-test.kuma8088.com
+# 3.1 Cloudflare Tunnel: camera.kuma8088.com
+# 3.2 Nginx: config/nginx/conf.d/camera-kuma8088.conf 作成
 
-# 各サイトで3.1〜3.6を実施
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/cameramanual' \
+  'https://camera.kuma8088.com' \
+  --path=/var/www/html/kuma8088-cameramanual \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/cameramanual' \
+  'https://camera.kuma8088.com' \
+  --path=/var/www/html/kuma8088-cameramanual \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_kuma8088_cameramanual.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/kuma8088-cameramanual \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://camera.kuma8088.com
+```
+
+**サイト11: blog.kuma8088.com/elementordemo1 → demo1.kuma8088.com**
+```bash
+# Phase 1で完了済み
+```
+
+**サイト12: blog.kuma8088.com/elementordemo02 → demo2.kuma8088.com**
+```bash
+# 3.1 Cloudflare Tunnel: demo2.kuma8088.com
+# 3.2 Nginx: config/nginx/conf.d/demo2-kuma8088.conf 作成
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/elementordemo02' \
+  'https://demo2.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementordemo02 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/elementordemo02' \
+  'https://demo2.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementordemo02 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_kuma8088_elementordemo02.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/kuma8088-elementordemo02 \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://demo2.kuma8088.com
+```
+
+**サイト13: blog.kuma8088.com/elementor-demo-03 → demo3.kuma8088.com**
+```bash
+# 3.1 Cloudflare Tunnel: demo3.kuma8088.com
+# 3.2 Nginx: config/nginx/conf.d/demo3-kuma8088.conf 作成
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/elementor-demo-03' \
+  'https://demo3.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementor-demo-03 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/elementor-demo-03' \
+  'https://demo3.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementor-demo-03 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_kuma8088_elementor_demo_03.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/kuma8088-elementor-demo-03 \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://demo3.kuma8088.com
+```
+
+**サイト14: blog.kuma8088.com/elementor-demo-04 → demo4.kuma8088.com**
+```bash
+# 3.1 Cloudflare Tunnel: demo4.kuma8088.com
+# 3.2 Nginx: config/nginx/conf.d/demo4-kuma8088.conf 作成
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/elementor-demo-04' \
+  'https://demo4.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementor-demo-04 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/elementor-demo-04' \
+  'https://demo4.kuma8088.com' \
+  --path=/var/www/html/kuma8088-elementor-demo-04 \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_kuma8088_elementor_demo_04.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/kuma8088-elementor-demo-04 \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://demo4.kuma8088.com
+```
+
+**サイト15: blog.kuma8088.com/ec02test → ec-test.kuma8088.com**
+```bash
+# 3.1 Cloudflare Tunnel: ec-test.kuma8088.com
+# 3.2 Nginx: config/nginx/conf.d/ec-test-kuma8088.conf 作成
+
+# 3.3 WordPress URL置換（HTTPS→HTTP順）
+# HTTPS版（メイン）
+docker compose exec wordpress wp search-replace \
+  'https://blog.kuma8088.com/ec02test' \
+  'https://ec-test.kuma8088.com' \
+  --path=/var/www/html/kuma8088-ec02test \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# HTTP版（念のため）
+docker compose exec wordpress wp search-replace \
+  'http://blog.kuma8088.com/ec02test' \
+  'https://ec-test.kuma8088.com' \
+  --path=/var/www/html/kuma8088-ec02test \
+  --all-tables \
+  --skip-columns=guid \
+  --allow-root
+
+# データベース直接確認
+docker compose exec mariadb mysql -uroot -p${MYSQL_ROOT_PASSWORD} -e "
+  SELECT option_value
+  FROM wp_kuma8088_ec02test.wp_options
+  WHERE option_name IN ('siteurl', 'home');
+"
+
+# 3.4 キャッシュクリア
+docker compose exec wordpress wp elementor flush-css \
+  --path=/var/www/html/kuma8088-ec02test \
+  --allow-root
+
+# 3.5 動作確認
+curl -I https://ec-test.kuma8088.com
 ```
 
 ---

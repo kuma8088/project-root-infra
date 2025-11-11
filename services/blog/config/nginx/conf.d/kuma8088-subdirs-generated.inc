@@ -27,34 +27,6 @@
         rewrite /cameramanual/(.*)$ /cameramanual/index.php?/$1 last;
     }
 
-    # Subdirectory site: elementordemo1
-    # Static files (wp-content, wp-includes)
-    location ~ ^/elementordemo1/(wp-content|wp-includes)/(.*)$ {
-        alias /var/www/html/kuma8088-elementordemo1/$1/$2;
-
-        expires max;
-        access_log off;
-    }
-
-    location /elementordemo1 {
-        alias /var/www/html/kuma8088-elementordemo1;
-        index index.php index.html;
-
-        location ~ \.php$ {
-            include fastcgi_params;
-            fastcgi_pass wordpress:9000;
-            fastcgi_index index.php;
-            fastcgi_param SCRIPT_FILENAME $request_filename;
-            fastcgi_param HTTPS on;
-            fastcgi_param HTTP_X_FORWARDED_PROTO https;
-        }
-
-        try_files $uri $uri/ @elementordemo1;
-    }
-
-    location @elementordemo1 {
-        rewrite /elementordemo1/(.*)$ /elementordemo1/index.php?/$1 last;
-    }
 
     # Subdirectory site: elementordemo02
     # Static files (wp-content, wp-includes)
