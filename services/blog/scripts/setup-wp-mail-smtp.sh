@@ -100,6 +100,8 @@ OPTIONS:
     --dry-run           Show what would be done without making changes
     --verify            Verify current WP Mail SMTP configuration for all sites
     --test-email EMAIL  Send test email to specified address from all sites
+    --site SITE_PATH DOMAIN FROM_EMAIL
+                        Configure a single site (useful for new sites)
     --help              Show this help message
 
 EXAMPLES:
@@ -114,6 +116,9 @@ EXAMPLES:
 
     # Send test emails to verify SMTP settings
     $0 --test-email naoya.iimura@gmail.com
+
+    # Configure a single new site
+    $0 --site kuma8088-new-site blog.kuma8088.com/new-site noreply@kuma8088.com
 
 EOF
     exit 0
@@ -380,9 +385,45 @@ test_all_sites() {
     log_info "=================================================="
 }
 
+setup_single_site() {
+    local site_path="$1"
+    local domain="$2"
+    local from_email="$3"
+
+    log_info "=================================================="
+    log_info "Configuring single site: $site_path"
+    log_info "Domain: $domain"
+    log_info "From Email: $from_email"
+    log_info "=================================================="
+
+    # Backup (best effort)
+    backup_current_settings "$site_path" "" || true
+
+    # Install and activate plugin
+    if ! install_plugin "$site_path" "$domain"; then
+        log_error "Plugin installation failed for $site_path"
+        return 1
+    fi
+
+    # Configure SMTP
+    if ! configure_smtp "$site_path" "$domain" "$from_email"; then
+        log_error "SMTP configuration failed for $site_path"
+        return 1
+    fi
+
+    # Verify configuration
+    verify_configuration "$site_path" "$domain" "$from_email"
+
+    log_success "Single site $site_path configured successfully"
+    return 0
+}
+
 main() {
     local mode="setup"
     local test_email=""
+    local single_site_path=""
+    local single_site_domain=""
+    local single_site_email=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -399,6 +440,13 @@ main() {
                 mode="test"
                 test_email="$2"
                 shift 2
+                ;;
+            --site)
+                mode="single"
+                single_site_path="$2"
+                single_site_domain="$3"
+                single_site_email="$4"
+                shift 4
                 ;;
             --help)
                 show_usage
@@ -463,6 +511,13 @@ main() {
                 show_usage
             fi
             test_all_sites "$test_email"
+            ;;
+        single)
+            if [ -z "$single_site_path" ] || [ -z "$single_site_domain" ] || [ -z "$single_site_email" ]; then
+                log_error "Site path, domain, and from email are required for single site mode"
+                show_usage
+            fi
+            setup_single_site "$single_site_path" "$single_site_domain" "$single_site_email"
             ;;
     esac
 
