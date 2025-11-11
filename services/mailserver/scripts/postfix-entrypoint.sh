@@ -79,6 +79,13 @@ postconf -e 'smtpd_sasl_type=dovecot'
 postconf -e 'smtpd_sasl_path=private/auth'
 postconf -e 'smtpd_sasl_auth_enable=yes'
 postconf -e 'smtpd_tls_security_level=encrypt'
+# Rspamd milter連携を有効化
+postconf -e 'milter_default_action=accept'
+postconf -e 'milter_protocol=6'
+postconf -e 'smtpd_milters=inet:rspamd:11332'
+postconf -e 'non_smtpd_milters=$smtpd_milters'
+postconf -e 'milter_mail_macros=i {mail_name} {mail_version} {instance} {queue_id} {client_addr} {client_name} {auth_type} {auth_authen}'
+postconf -e 'milter_connect_macros="j {daemon_name} v"'
 
 # Ensure log files exist and rsyslog is running so logs persist to mounted volume.
 mkdir -p /var/log
