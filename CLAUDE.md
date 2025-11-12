@@ -48,9 +48,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ EC2: **PostfixがDockerコンテナで稼働**（MX Gateway）
 - 📝 KVM環境: 構築済みだが現在未使用（将来的な仮想化用）
 
-**最新の統合・改善**（2025-11-11完了）:
-- ✅ WordPress → Mailserver SMTP連携（全16サイト）
-- ✅ SPF/DKIM認証によるメール配信改善
+**最新の統合・改善**（2025-11-12完了）:
+- ✅ Phase A-2本番ドメイン移行完了（15サイト: blog.* → 本番ドメイン）
+- ✅ demo1.kuma8088.com: WP Mail SMTP設定済み
+- ✅ 残り15サイト: Phase A-2完了後にWP Mail SMTP設定予定
 - ✅ Nginx HTTPS検出パラメータ追加（Elementor jQuery 404エラー解消）
 - ✅ Nginx設定の自動生成化（247行→55行、78%削減）
 - ✅ バックアップ/リストアスクリプトの堅牢性向上（preflight checks + dry-run）
@@ -194,11 +195,11 @@ docker compose up -d
 **[docs/application/blog/README.md](docs/application/blog/README.md)** - Blog作業時に必読
 
 **内容**:
-- 16 WordPress サイト構成（Phase A-1完了）
+- 16 WordPress サイト構成（Phase A-1完了、Phase A-2実施済み）
 - Cloudflare Tunnel設定（5 Public Hostnames - 16 WordPress installations）
 - Docker Compose環境（4コンテナ）
-- WordPress → Mailserver SMTP連携（Phase A-1完了）
-- 既知の問題（Phase 011: サブディレクトリ表示問題、Elementor、PHP互換性）
+- 本番ドメイン移行: 15サイト完了（blog.* → 本番ドメイン）
+- WP Mail SMTP: demo1.kuma8088.com設定済み、残り15サイトは要設定
 - wp-cli操作、URL置換手順
 
 **新規サイト作成自動化** ✨ NEW (2025-11-11):
