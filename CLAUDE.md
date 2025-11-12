@@ -45,10 +45,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ Dell: Docker Compose環境
   - Mailserver（8コンテナ: Postfix, Dovecot, MariaDB等）
   - Blog System（4コンテナ: WordPress, Nginx, MariaDB, Cloudflared - **16サイト**）
-- ✅ EC2: **PostfixがDockerコンテナで稼働**（MX Gateway）
+- ✅ Cloudflare: **Email Worker稼働中**（MX受信 → Dell LMTPリレー、月額¥0）
+- ❌ EC2 MX Gateway: **廃止済み**（2025-11-12にCloudflare Email Workerへ移行完了）
 - 📝 KVM環境: 構築済みだが現在未使用（将来的な仮想化用）
 
 **最新の統合・改善**（2025-11-12完了）:
+- ✅ **Cloudflare Email Worker移行完了**（EC2 MX Gateway廃止、月額¥525→¥0削減）
 - ✅ Phase A-2本番ドメイン移行完了（15サイト: blog.* → 本番ドメイン）
 - ✅ demo1.kuma8088.com: WP Mail SMTP設定済み
 - ✅ 残り15サイト: Phase A-2完了後にWP Mail SMTP設定予定
@@ -56,7 +58,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ Nginx設定の自動生成化（247行→55行、78%削減）
 - ✅ バックアップ/リストアスクリプトの堅牢性向上（preflight checks + dry-run）
 
-**重要:** Dell側・EC2側ともにPostfixはDockerコンテナで稼働しています。systemd/journalctlベースのコマンドではなく、`docker logs`/`docker exec`を使用してください。
+**重要:**
+- Dell側PostfixはDockerコンテナで稼働。systemd/journalctlではなく、`docker logs`/`docker exec`を使用。
+- MX受信はCloudflare Email Workerが処理（EC2 MX Gatewayは廃止済み）。
 
 **ハードウェア制約**:
 - CPU: 6コア/12スレッド、RAM: 32GB、Storage: 3.6TB HDD + 390GB SSD

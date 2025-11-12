@@ -125,21 +125,29 @@
 
 **復旧所要時間**: 30分〜4時間（障害レベルによる）
 
-### 7. 移行計画: Cloudflare Email Worker移行
+### 7. Cloudflare Email Worker（MX受信）✅ 実装完了
 
-#### [Cloudflare Email Worker実装手順書 (migration/cloudflare-email-worker-implementation.md)](./migration/cloudflare-email-worker-implementation.md) ⭐ 採用
-- **選定理由**: 月額¥0、エッジ実行、既存インフラ活用
+#### [Cloudflare Email Worker実装手順書 (migration/cloudflare-email-worker-implementation.md)](./migration/cloudflare-email-worker-implementation.md) ⭐ 運用中
+- **実装完了日**: 2025-11-12
+- **EC2 MX Gateway**: ❌ 廃止済み
 - Dell側メール受信API実装（FastAPI）
 - Cloudflare Email Worker実装（JavaScript）
-- Cloudflare Tunnel設定更新
-- 本番移行・ロールバック手順
-- 運用・保守ガイド
+- Cloudflare Tunnel経由LMTP配信
 
-**実装により達成:**
+**達成された効果:**
 - ✅ **EC2廃止**: 月額¥525 → ¥0（100%削減）
 - ✅ **サーバーレス化**: EC2管理作業不要
 - ✅ **高速化**: エッジ実行、コールドスタートなし
 - ✅ **高可用性**: Cloudflare SLA 99.99%
+
+**メールフロー（現在）:**
+```
+Internet → Cloudflare Email Routing (MX受信)
+         → Cloudflare Email Worker (サーバーレス処理)
+         → Cloudflare Tunnel (暗号化通信)
+         → Dell Postfix (LMTP配信)
+         → Dovecot (メールボックス保存)
+```
 
 #### [移行オプション比較（参考資料）(migration/cloudflare-email-relay-migration.md)](./migration/cloudflare-email-relay-migration.md)
 - 5つの移行オプション調査結果
