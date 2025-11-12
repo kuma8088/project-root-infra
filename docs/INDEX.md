@@ -38,8 +38,9 @@
   - API仕様: [usermgmt/guides/API.md](/docs/application/mailserver/usermgmt/guides/API.md)
   - 設計: [usermgmt/design/](/docs/application/mailserver/usermgmt/design/)
   - フェーズ記録: [usermgmt/phases/](/docs/application/mailserver/usermgmt/phases/)
-- **移行計画:**
-  - Cloudflare Email Worker実装手順書: [migration/cloudflare-email-worker-implementation.md](/docs/application/mailserver/migration/cloudflare-email-worker-implementation.md) ⭐ 採用
+- **Cloudflare Email Worker:**
+  - 実装手順書: [migration/cloudflare-email-worker-implementation.md](/docs/application/mailserver/migration/cloudflare-email-worker-implementation.md) ✅ 運用中 (2025-11-12)
+  - EC2 MX Gateway: ❌ 廃止済み（月額¥525→¥0削減）
   - 移行オプション比較（参考資料）: [migration/cloudflare-email-relay-migration.md](/docs/application/mailserver/migration/cloudflare-email-relay-migration.md)
 - **トラブルシューティング:** [/services/mailserver/troubleshoot/README.md](/services/mailserver/troubleshoot/README.md)
 - **Device Access:** [device/README.md](/docs/application/mailserver/device/README.md)
@@ -87,7 +88,7 @@
   - backup-to-s3.sh, restore-from-s3.sh
   - scan-mailserver.sh
   - add-user.sh
-- `terraform/` - EC2 MX Gateway (IaC)
+- `terraform/` - EC2 MX Gateway (IaC) ❌ 廃止済み
 - `terraform/s3-backup/` - S3 Backup Infrastructure (IaC)
 - `usermgmt/` - Flask User Management App
 - `tests/` - バックアップシステムテスト (38テスト)
@@ -145,7 +146,7 @@
   - SMTP設定確認: `/services/blog/scripts/check-wp-mail-smtp.sh`
 
 **IaC操作:**
-- EC2 MX Gateway: `/services/mailserver/terraform/`
+- EC2 MX Gateway: `/services/mailserver/terraform/` ❌ 廃止済み
 - S3 Backup: `/services/mailserver/terraform/s3-backup/`
 
 ## 🏷️ ドキュメント命名規則

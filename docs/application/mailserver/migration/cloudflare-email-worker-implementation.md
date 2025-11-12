@@ -1,8 +1,9 @@
 # Cloudflare Email Worker移行実装手順書
 
 **作成日**: 2025-11-12
+**完了日**: 2025-11-12
 **対象**: EC2 MX Gateway廃止、Cloudflare Email Worker実装
-**ステータス**: 実装準備中
+**ステータス**: ✅ 実装完了・稼働中
 
 ---
 
@@ -406,8 +407,6 @@ services:
     networks:
       mailserver_network:
         ipv4_address: 172.20.0.100
-    ports:
-      - "8080:8080"
     environment:
       - API_KEY=${MAILSERVER_API_KEY}
       - LMTP_HOST=dovecot
@@ -455,77 +454,103 @@ docker compose up -d mailserver-api
 docker compose logs -f mailserver-api
 
 # ヘルスチェック
-curl http://localhost:8080/health
+curl http://172.20.0.100:8080/health
 ```
 
 ---
 
 ### Phase 2: Cloudflare Tunnel設定更新
 
-#### 3.2.1 現在のCloudflare Tunnel確認
+#### 3.2.1 cloudflaredサービスをmailserverネットワークへ参加
 
-```bash
-# Blog用Cloudflare Tunnel確認
-cd /opt/onprem-infra-system/project-root-infra/services/blog
-cat config/cloudflared/config.yml
+Blogスタックのcloudflaredコンテナが `mailserver-api` へ直接到達できるよう、Docker Composeを更新する。
+
+**ファイル:** `services/blog/docker-compose.yml`
+
+```diff
+   cloudflared:
+     image: cloudflare/cloudflared:latest
+     container_name: blog-cloudflared
+     hostname: cloudflared
+     restart: always
+     networks:
+       blog_network:
+         ipv4_address: 172.22.0.10
++      mailserver_network:
+     command: tunnel run
+     environment:
+       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
 ```
 
-#### 3.2.2 Tunnel設定に新規ホスト名追加
-
-**オプションA: Blog用Tunnelを拡張（推奨）**
-
-**ファイル:** `services/blog/config/cloudflared/config.yml`
-
-```yaml
-tunnel: <your-tunnel-id>
-credentials-file: /etc/cloudflared/credentials.json
-
-ingress:
-  # 既存のBlogサイト
-  - hostname: blog.kuma8088.com
-    service: http://wordpress:80
-  # ... 他のBlogサイト ...
-
-  # 新規: メール受信API
-  - hostname: mail-api.kuma8088.com
-    service: http://172.20.0.100:8080
-    originRequest:
-      connectTimeout: 30s
-      noTLSVerify: false
-
-  - service: http_status:404
-```
-
-**オプションB: 別Tunnelを作成**
-
-別のTunnelを作成する場合は、Cloudflare Dashboard → Zero Trust → Tunnelsで新規作成。
-
-#### 3.2.3 Cloudflare DNS設定
-
-Cloudflare Dashboard → DNS → Recordsで以下を確認：
-
-```
-mail-api.kuma8088.com  CNAME  <tunnel-id>.cfargotunnel.com  (Auto, Proxied)
-```
-
-Tunnel設定を保存すると自動的に作成されます。
-
-#### 3.2.4 Tunnel再起動
+更新後に cloudflared を再作成して新ネットワークに参加させる。
 
 ```bash
 cd /opt/onprem-infra-system/project-root-infra/services/blog
+docker compose up -d cloudflared
+docker compose ps cloudflared
+```
 
-# Cloudflaredコンテナ再起動
+#### 3.2.2 現在のCloudflare Tunnel確認
+
+この環境では `blog_dell_workstation` トンネル（ID: `5cd28b18-07fa-459f-994a-ad43d70efb50`）を使用し、`.env` の `CLOUDFLARE_TUNNEL_TOKEN` が同トンネルへ紐づくトークンになっていることを確認する。
+
+```bash
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+grep -n "CLOUDFLARE_TUNNEL_TOKEN" .env
+```
+
+#### 3.2.3 Tunnel設定に新規ホスト名追加
+
+Cloudflare Zero Trust → Tunnels → `blog_dell_workstation` → Public Hostnames で以下を登録する（既に登録済みなら確認のみ）。
+
+| 項目 | 値 |
+| --- | --- |
+| Hostname | `mail-api.kuma8088.com` |
+| Service | `http://mailserver-api:8080` （mailserver_network経由で名前解決） |
+| Tunnel | `blog_dell_workstation` (`5cd28b18-07fa-459f-994a-ad43d70efb50`) |
+| Origin Request | `Connect timeout: 30s`, `TLS Verify: Enabled` |
+
+CLIを併用する場合は参考として以下を実行する（cloudflared v2023.10+）。
+
+```bash
+cloudflared tunnel route dns 5cd28b18-07fa-459f-994a-ad43d70efb50 mail-api.kuma8088.com
+cloudflared tunnel ingress rule add \
+  --hostname mail-api.kuma8088.com \
+  --service http://mailserver-api:8080
+```
+
+#### 3.2.4 Cloudflare DNS設定
+
+Cloudflare Dashboard → DNS → Records で CNAME がトンネルIDへ向いていることを確認する。
+
+```
+mail-api.kuma8088.com  CNAME  5cd28b18-07fa-459f-994a-ad43d70efb50.cfargotunnel.com  (Proxied)
+```
+
+CLIチェック例：
+
+```bash
+dig mail-api.kuma8088.com +short
+# => 5cd28b18-07fa-459f-994a-ad43d70efb50.cfargotunnel.com
+```
+
+#### 3.2.5 Tunnel再起動と疎通確認
+
+```bash
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+
+# cloudflaredを再起動して設定を反映
 docker compose restart cloudflared
-
-# ログ確認
 docker compose logs -f cloudflared
+
+# コンテナ内部から mailserver-api に到達できるか確認
+docker compose exec cloudflared curl -s http://mailserver-api:8080/health
 ```
 
-#### 3.2.5 API接続テスト
+#### 3.2.6 外部経由のAPI接続テスト
 
 ```bash
-# 外部からヘルスチェック
+# Cloudflare経由でヘルスチェック
 curl https://mail-api.kuma8088.com/health
 
 # 期待される応答:
@@ -705,23 +730,27 @@ Dashboard上で「Save and Deploy」をクリック
 export API_KEY="<.envのMAILSERVER_API_KEY>"
 
 # 2. テストメール送信
-curl -X POST https://mail-api.kuma8088.com/api/v1/inbound-mail \
+curl -X POST http://172.20.0.100:8080/api/v1/inbound-mail \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{
     "from": "test@example.com",
-    "to": "user@kuma8088.com",
-    "subject": "Test Email",
-    "raw": "From: test@example.com\r\nTo: user@kuma8088.com\r\nSubject: Test Email\r\n\r\nThis is a test message.",
+    "to": "info@kuma8088.com",
+    "subject": "Local API Test",
+    "raw": "From: test@example.com\r\nTo: info@kuma8088.com\r\nSubject: Local API Test\r\n\r\nThis is a local API test message.",
     "timestamp": "2025-11-12T10:00:00Z"
   }'
 
 # 期待される応答:
-# {"status":"success","message":"Email delivered to LMTP","recipient":"user@kuma8088.com"}
+# {"status":"success","message":"Email delivered to LMTP","recipient":"info@kuma8088.com"}
 
-# 3. Dovecotログ確認
-docker compose logs dovecot | grep LMTP | tail -10
+# 3. Dovecotログ確認（ケースインセンシティブ検索推奨）
+docker compose logs dovecot | grep -i 'lmtp(' | tail -10
 ```
+
+**トラブルシュート**
+- `{"detail":"LMTP error: (500, b'5.5.1 Unknown command')}` が返る場合は、LMTPポートに対してSMTPクライアントで接続している可能性がある。`mailserver-api` コンテナを最新の `smtplib.LMTP` 実装に更新し、再度 `docker compose up -d mailserver-api` を実行すること。
+- `401 Invalid API Key` の場合は `.env` の `MAILSERVER_API_KEY` を再確認し、`docker compose restart mailserver-api` で反映させる。
 
 ### 4.2 Worker動作テスト
 
