@@ -7,6 +7,7 @@ import {
   Cpu,
   MemoryStick,
   AlertCircle,
+  Activity,
 } from 'lucide-react'
 import {
   Card,
@@ -15,56 +16,85 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-
-// Mock data - Replace with actual API calls
-const mockStats = {
-  services: {
-    running: 25,
-    total: 28,
-  },
-  cpu: 45.2,
-  memory: 15.8,
-  disk: 2.1,
-  alerts: 2,
-}
+import { dashboardAPI } from '@/lib/api'
 
 export default function Dashboard() {
-  // TODO: Replace with actual API call
-  const { data: stats } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => {
-      // const response = await fetch('/api/v1/dashboard/stats')
-      // return response.json()
-      return mockStats
-    },
+  // Fetch dashboard data from Backend API
+  const { data: overview } = useQuery({
+    queryKey: ['dashboard-overview'],
+    queryFn: dashboardAPI.getOverview,
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
+
+  const { data: systemStats } = useQuery({
+    queryKey: ['dashboard-system'],
+    queryFn: dashboardAPI.getSystemStats,
+    refetchInterval: 5000, // Refresh every 5 seconds
+  })
+
+  const { data: containers } = useQuery({
+    queryKey: ['dashboard-containers'],
+    queryFn: dashboardAPI.getContainerStats,
+    refetchInterval: 10000, // Refresh every 10 seconds
+  })
+
+  const { data: wordpress } = useQuery({
+    queryKey: ['dashboard-wordpress'],
+    queryFn: dashboardAPI.getWordPressStats,
+    refetchInterval: 30000,
+  })
+
+  const { data: redis } = useQuery({
+    queryKey: ['dashboard-redis'],
+    queryFn: dashboardAPI.getRedisStats,
+    refetchInterval: 10000,
+  })
+
+  // Format uptime in human-readable format
+  const formatUptime = (seconds: number): string => {
+    const days = Math.floor(seconds / 86400)
+    const hours = Math.floor((seconds % 86400) / 3600)
+    return `${days}日 ${hours}時間`
+  }
+
+  // Alert detection
+  const alerts = []
+  if (systemStats?.cpu_percent && systemStats.cpu_percent > 80) {
+    alerts.push('CPU使用率が高くなっています')
+  }
+  if (systemStats?.memory_percent && systemStats.memory_percent > 80) {
+    alerts.push('メモリ使用率が高くなっています')
+  }
+  if (systemStats?.disk_percent && systemStats.disk_percent > 90) {
+    alerts.push('ディスク使用率が高くなっています')
+  }
 
   const statCards = [
     {
       title: 'サービス稼働状況',
-      value: `${stats?.services.running || 0} / ${stats?.services.total || 0}`,
-      description: '稼働中のサービス数',
+      value: `${containers?.running || 0} / ${containers?.total || 0}`,
+      description: '稼働中のコンテナ数',
       icon: Server,
       color: 'text-green-600',
     },
     {
       title: 'CPU使用率',
-      value: `${stats?.cpu || 0}%`,
-      description: '現在のCPU使用率',
+      value: `${systemStats?.cpu_percent?.toFixed(1) || 0}%`,
+      description: `Load Avg: ${systemStats?.load_average?.[0]?.toFixed(2) || 0}`,
       icon: Cpu,
       color: 'text-blue-600',
     },
     {
       title: 'メモリ使用量',
-      value: `${stats?.memory || 0} GB`,
-      description: '32 GB中',
+      value: `${systemStats?.memory_used_gb?.toFixed(1) || 0} GB`,
+      description: `${systemStats?.memory_total_gb || 32} GB中 (${systemStats?.memory_percent?.toFixed(1) || 0}%)`,
       icon: MemoryStick,
       color: 'text-purple-600',
     },
     {
       title: 'ディスク使用量',
-      value: `${stats?.disk || 0} TB`,
-      description: '3.4 TB中',
+      value: `${systemStats?.disk_used_gb?.toFixed(2) || 0} TB`,
+      description: `${systemStats?.disk_total_gb?.toFixed(1) || 3.4} TB中 (${systemStats?.disk_percent?.toFixed(1) || 0}%)`,
       icon: HardDrive,
       color: 'text-yellow-600',
     },
@@ -76,25 +106,31 @@ export default function Dashboard() {
       description: 'WordPressサイト管理',
       icon: Database,
       stats: [
-        { label: '稼働サイト数', value: '16' },
-        { label: 'コンテナ数', value: '4' },
+        { label: '稼働サイト数', value: String(wordpress?.total_sites || 16) },
+        {
+          label: 'Redisキャッシュ',
+          value: redis?.connected ? `${redis.total_keys || 0}` : '未接続'
+        },
       ],
       actions: [
-        { label: 'サイト一覧', href: '/blog/sites' },
-        { label: 'Docker管理', href: '/docker?filter=blog' },
+        { label: 'サイト一覧', href: '/wordpress' },
+        { label: 'データベース', href: '/database' },
       ],
     },
     {
-      title: 'Mailserver',
-      description: 'メールサーバー管理',
-      icon: Server,
+      title: 'システムリソース',
+      description: 'CPU・メモリ・ディスク',
+      icon: Activity,
       stats: [
-        { label: 'アクティブユーザー', value: '12' },
-        { label: 'コンテナ数', value: '9' },
+        {
+          label: 'システム稼働時間',
+          value: systemStats?.uptime_seconds ? formatUptime(systemStats.uptime_seconds) : '不明'
+        },
+        { label: 'データベース数', value: String(overview?.total_databases || 0) },
       ],
       actions: [
-        { label: 'ユーザー管理', href: '/mailserver/users' },
-        { label: 'Docker管理', href: '/docker?filter=mailserver' },
+        { label: 'Docker管理', href: '/docker' },
+        { label: 'PHP設定', href: '/php' },
       ],
     },
     {
@@ -102,25 +138,25 @@ export default function Dashboard() {
       description: 'バックアップ・リストア',
       icon: Database,
       stats: [
-        { label: '最終バックアップ', value: '2時間前' },
-        { label: '成功率', value: '100%' },
+        { label: 'バックアップ総数', value: String(overview?.backup_count || 0) },
+        { label: 'スケジュール', value: '日次/週次' },
       ],
       actions: [
-        { label: 'バックアップ実行', href: '/backup/run' },
-        { label: 'バックアップ履歴', href: '/backup/history' },
+        { label: 'バックアップ管理', href: '/backup' },
+        { label: 'スケジュール確認', href: '/backup' },
       ],
     },
     {
-      title: 'システム設定',
-      description: 'システム全般の設定',
+      title: 'セキュリティ',
+      description: 'SSL証明書・セキュリティ設定',
       icon: Container,
       stats: [
-        { label: 'アラート数', value: String(stats?.alerts || 0) },
-        { label: 'ログ件数', value: '1,234' },
+        { label: 'SSL証明書', value: '有効' },
+        { label: 'Cloudflare保護', value: '有効' },
       ],
       actions: [
-        { label: 'アラート設定', href: '/settings/alerts' },
-        { label: 'ログ表示', href: '/logs' },
+        { label: 'セキュリティ設定', href: '/security' },
+        { label: 'ドメイン管理', href: '/domains' },
       ],
     },
   ]
@@ -133,22 +169,24 @@ export default function Dashboard() {
           ダッシュボード
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          システム全体の状況を確認できます
+          システム全体の状況を確認できます（自動更新: 5-30秒）
         </p>
       </div>
 
       {/* Alert banner */}
-      {stats?.alerts && stats.alerts > 0 && (
+      {alerts.length > 0 && (
         <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
             <div className="flex-1">
               <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                {stats.alerts}件のアラートがあります
+                {alerts.length}件のアラートがあります
               </h3>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                システムの確認が必要です。詳細はアラート設定ページをご確認ください。
-              </p>
+              <ul className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 space-y-1">
+                {alerts.map((alert, index) => (
+                  <li key={index}>• {alert}</li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
