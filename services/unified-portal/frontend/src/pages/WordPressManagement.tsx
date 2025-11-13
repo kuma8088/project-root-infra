@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   RefreshCw,
@@ -9,6 +9,7 @@ import {
   Upload,
   Download,
   RotateCcw,
+  AlertCircle,
 } from 'lucide-react'
 import {
   Card,
@@ -18,89 +19,69 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
-// Mock data
-const mockSites = [
-  {
-    name: 'kuma8088',
-    url: 'https://kuma8088.com',
-    version: '6.4.2',
-    status: 'active',
-    size: '245 MB',
-    posts: 127,
-    lastBackup: '2時間前',
-  },
-  {
-    name: 'demo1-kuma8088',
-    url: 'https://demo1.kuma8088.com',
-    version: '6.4.2',
-    status: 'active',
-    size: '128 MB',
-    posts: 45,
-    lastBackup: '2時間前',
-  },
-  {
-    name: 'webmakeprofit',
-    url: 'https://webmakeprofit.org',
-    version: '6.4.1',
-    status: 'active',
-    size: '512 MB',
-    posts: 302,
-    lastBackup: '2時間前',
-  },
-]
-
-const mockBackups = [
-  {
-    id: 1,
-    site: 'kuma8088',
-    timestamp: '2025-11-13 03:00:00',
-    size: '245 MB',
-    type: 'daily',
-  },
-  {
-    id: 2,
-    site: 'kuma8088',
-    timestamp: '2025-11-12 03:00:00',
-    size: '243 MB',
-    type: 'daily',
-  },
-  {
-    id: 3,
-    site: 'kuma8088',
-    timestamp: '2025-11-10 02:00:00',
-    size: '240 MB',
-    type: 'weekly',
-  },
-]
+import { wordpressAPI } from '@/lib/api'
 
 export default function WordPressManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const [selectedSite, setSelectedSite] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const queryClient = useQueryClient()
 
-  const { data: sites } = useQuery({
+  // Query: List sites
+  const { data: sites, isLoading, error } = useQuery({
     queryKey: ['wordpress-sites'],
-    queryFn: async () => mockSites,
+    queryFn: wordpressAPI.listSites,
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
 
-  const { data: backups } = useQuery({
-    queryKey: ['wordpress-backups', selectedSite],
-    queryFn: async () => {
-      if (!selectedSite) return []
-      return mockBackups.filter((b) => b.site === selectedSite)
-    },
-    enabled: !!selectedSite,
+  // Query: WordPress stats
+  const { data: stats } = useQuery({
+    queryKey: ['wordpress-stats'],
+    queryFn: wordpressAPI.getStats,
+    refetchInterval: 30000,
   })
 
   const filteredSites = sites?.filter((site) =>
-    site.name.toLowerCase().includes(searchQuery.toLowerCase())
+    site.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    site.url.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const handleAction = (action: string, site?: string) => {
-    console.log('Action:', action, site)
-    // TODO: Implement API call
+    if (action === 'refresh') {
+      queryClient.invalidateQueries({ queryKey: ['wordpress-sites'] })
+      queryClient.invalidateQueries({ queryKey: ['wordpress-stats'] })
+    } else {
+      console.log('Action:', action, site)
+      // TODO: Implement other API calls
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-primary" />
+          <p className="text-muted-foreground">サイト一覧を読み込み中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-600" />
+          <p className="text-red-600">サイト一覧の取得に失敗しました</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {error instanceof Error ? error.message : '不明なエラー'}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -111,7 +92,7 @@ export default function WordPressManagement() {
           WordPress管理
         </h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          WordPressサイトの作成・管理・リストアを行います
+          WordPressサイトの作成・管理・リストアを行います（自動更新: 30秒）
         </p>
       </div>
 
@@ -144,39 +125,53 @@ export default function WordPressManagement() {
             <Globe className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{sites?.length || 0}</div>
+            <div className="text-2xl font-bold">{stats?.total_sites || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              オンライン: {stats?.sites_online || 0}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">総容量</CardTitle>
+            <CardTitle className="text-sm font-medium">総プラグイン数</CardTitle>
             <Download className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">885 MB</div>
+            <div className="text-2xl font-bold">{stats?.total_plugins || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              全サイト合計
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">総投稿数</CardTitle>
-            <Globe className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium">Redisキャッシュ</CardTitle>
+            <Upload className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">474</div>
+            <div className="text-2xl font-bold">{stats?.redis_enabled_sites || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              有効サイト数
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              最終バックアップ
+              サイトステータス
             </CardTitle>
-            <Upload className="h-4 w-4 text-primary" />
+            <Globe className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2時間前</div>
+            <div className="text-2xl font-bold">
+              {stats?.sites_online === stats?.total_sites ? '正常' : '要確認'}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              全サイト状態
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -194,7 +189,7 @@ export default function WordPressManagement() {
             {filteredSites?.map((site) => (
               <div
                 key={site.name}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <div className="flex items-center gap-4">
                   <Globe className="h-8 w-8 text-primary" />
@@ -209,18 +204,19 @@ export default function WordPressManagement() {
                       >
                         {site.url}
                       </a>
-                      <span>WP {site.version}</span>
-                      <span>{site.posts} 投稿</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{site.size}</p>
-                    <p className="text-xs text-muted-foreground">
-                      バックアップ: {site.lastBackup}
-                    </p>
+                  <div
+                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      site.status === 'online'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+                    }`}
+                  >
+                    {site.status}
                   </div>
 
                   <div className="flex gap-2">
@@ -228,6 +224,7 @@ export default function WordPressManagement() {
                       size="sm"
                       variant="outline"
                       onClick={() => window.open(site.url + '/wp-admin', '_blank')}
+                      title="管理画面を開く"
                     >
                       <Settings className="h-4 w-4" />
                     </Button>
@@ -235,6 +232,7 @@ export default function WordPressManagement() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleAction('backup', site.name)}
+                      title="バックアップ"
                     >
                       <Upload className="h-4 w-4" />
                     </Button>
@@ -245,6 +243,7 @@ export default function WordPressManagement() {
                         setSelectedSite(site.name)
                         setShowRestoreModal(true)
                       }}
+                      title="リストア"
                     >
                       <RotateCcw className="h-4 w-4" />
                     </Button>
@@ -252,6 +251,7 @@ export default function WordPressManagement() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleAction('delete', site.name)}
+                      title="削除"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
