@@ -2,7 +2,7 @@
  * Cloudflare DNS API client for Domain Management
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
  * Generic API fetch wrapper with error handling

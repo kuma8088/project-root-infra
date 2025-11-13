@@ -89,10 +89,6 @@ export default function Login() {
               {isLoading ? 'ログイン中...' : 'ログイン'}
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            <p>デフォルト: admin / change-this-password-in-production</p>
-          </div>
         </CardContent>
       </Card>
     </div>
