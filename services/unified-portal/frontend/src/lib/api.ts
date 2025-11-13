@@ -216,6 +216,95 @@ export const dockerAPI = {
 }
 
 // ============================================================================
+// WordPress API Types
+// ============================================================================
+
+export interface WordPressSiteBase {
+  name: string
+  url: string
+  status: string
+}
+
+export interface WordPressSiteDetail extends WordPressSiteBase {
+  wp_version: string
+  php_version: string
+  theme: string
+  db_name: string
+  redis_enabled: boolean
+}
+
+export interface WordPressPlugin {
+  name: string
+  status: string
+  version: string
+  update_available?: boolean
+}
+
+export interface WordPressStats {
+  total_sites: number
+  sites_online: number
+  total_plugins: number
+  redis_enabled_sites: number
+}
+
+export interface CacheOperation {
+  success: boolean
+  message: string
+  site_name: string
+}
+
+export interface SMTPStatus {
+  configured: boolean
+  from_email?: string
+  from_name?: string
+  mailer?: string
+}
+
+// ============================================================================
+// WordPress API Functions
+// ============================================================================
+
+export const wordpressAPI = {
+  /**
+   * List all WordPress sites
+   */
+  listSites: () =>
+    apiFetch<WordPressSiteBase[]>('/api/v1/wordpress/sites'),
+
+  /**
+   * Get site details
+   */
+  getSiteDetail: (siteName: string) =>
+    apiFetch<WordPressSiteDetail>(`/api/v1/wordpress/sites/${siteName}`),
+
+  /**
+   * Get site plugins
+   */
+  getSitePlugins: (siteName: string) =>
+    apiFetch<WordPressPlugin[]>(`/api/v1/wordpress/sites/${siteName}/plugins`),
+
+  /**
+   * Clear site cache
+   */
+  clearCache: (siteName: string) =>
+    apiFetch<CacheOperation>(`/api/v1/wordpress/sites/${siteName}/cache/clear`, {
+      method: 'POST',
+    }),
+
+  /**
+   * Get SMTP status
+   */
+  getSMTPStatus: (siteName: string) =>
+    apiFetch<SMTPStatus>(`/api/v1/wordpress/sites/${siteName}/smtp-status`),
+
+  /**
+   * Get WordPress stats
+   */
+  getStats: () =>
+    apiFetch<WordPressStats>('/api/v1/wordpress/stats'),
+}
+
+// ============================================================================
 // Export for convenience
 // ============================================================================
 
