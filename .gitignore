@@ -115,3 +115,4 @@ docs/application/blog/claudedocs/xserver-htaccess*.md
 **/.wrangler/
 cloudflare/**/.env
 cloudflare/**/node_modules/
+services/unified-portal/frontend/node_modules/
