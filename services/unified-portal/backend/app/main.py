@@ -98,7 +98,7 @@ async def root() -> JSONResponse:
 
 
 # Import and register routers
-from app.routers import domains, dashboard, docker, wordpress, database, php
+from app.routers import domains, dashboard, docker, wordpress, database, php, security, backup
 
 app.include_router(domains.router)
 app.include_router(dashboard.router)
@@ -106,6 +106,8 @@ app.include_router(docker.router)
 app.include_router(wordpress.router)
 app.include_router(database.router)
 app.include_router(php.router)
+app.include_router(security.router)
+app.include_router(backup.router)
 
 # Future routers (to be implemented)
 # from app.routers import auth, docker, backup, websocket
