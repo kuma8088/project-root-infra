@@ -12,22 +12,31 @@
 
 ### 管理システム
 
-- [ ] **[#001] 管理ポータル（blog/mailserverの統合）**
-  - 現状: Blog System と Mailserver で管理インターフェースが分離
-  - 目標: 統合管理ポータルの構築
-  - 詳細: `docs/application/blog/issue/I001_management-portal-integration.md`
-
-- [ ] **[#002] 管理ポータルのデザイン変更（モダンでスタイリッシュにする）**
-  - 現状: 既存デザインが機能的だが古風
-  - 目標: モダンなUI/UXへの刷新
-  - 詳細: `docs/application/blog/issue/I002_portal-design-modernization.md`
-
-- [ ] **[#003] 管理ポータルの機能整理・追加**
-  - 現状: 必要機能の洗い出しが未完了
-  - 目標: 機能要件の明確化と実装
-  - 詳細: `docs/application/blog/issue/I003_portal-feature-enhancement.md`
+- [ ] **[#017] ドメインページでのDNS管理設定**
+  - 現状: ドメイン編集機能がない
+  - 目標: 少なくともCloudflareに飛ばす（理想はポータル反映でCFへ設定を反映）
 
 ### バックアップ・データ管理
+
+- [ ] **[#016] 旧バックアップバケット(s3)の削除**
+ - 現状: バケット名にアカウントIDが記述されているので新バケットに変更したがオブジェクトロック中で削除できない
+ - 目標: 12/14にバケットを削除する
+
+### インフラ最適化
+
+- [ ] **[#015] Terraform(tfstate)のバックアップ**
+ - 現状: バケット名にアカウントIDが記述されているので新バケットに変更した
+ - 目標: 新しいバケットへのtfstateファイルのバックアップ実装
+
+### Blog System
+
+- [ ] **[#013] SMTP経由でもメールが迷惑メール疑惑をGmailからかけられる対策**
+
+---
+
+## 🔄 Processing（作業中）
+
+現在進行中のタスク。
 
 - [ ] **[#004] 自動バックアップの不具合修正（緊急）** ⚠️
   - 現状: 自動バックアップが機能していない
@@ -41,30 +50,6 @@
   - 目標: 改善・最適化の検討
   - 詳細: `docs/application/blog/issue/I005_backup-system-improvement.md`
   - 結果待ち：20251114の自動バックアップの結果を確認しOKなら対応完了
-
-- [ ] **[#006] キャッシュシステム（blogsystem）**
-  - 現状: WordPress デフォルトキャッシュのみ
-  - 目標: Redis/Memcached等の導入検討
-  - 詳細: `docs/application/blog/issue/I006_cache-system-implementation.md`
-
-- [ ] **[#016] 旧バックアップバケット(s3)の削除**
-
-### インフラ最適化
-
-- [ ] **[#015] Terraform(tfstate)のバックアップ**
-
-### Blog System
-
-- [ ] **[#013] SMTP経由でもメールが迷惑メール疑惑をGmailからかけられる対策**
-
-- [ ] **[#014] https://webmakesprofit.comからメールが飛ばない問題**
-
----
-
-## 🔄 Processing（作業中）
-
-現在進行中のタスク。
-
 
 
 ---
@@ -98,7 +83,6 @@
   - 目標: ライセンス確認と本番環境での動作検証
   - 詳細: `docs/application/blog/issue/I009_site-validation.md`
 
-
 - [x] **[#008] blog.*ドメインの本番移行**
   - 現状: blog.webmakeprofit.org 等のサブドメインで運用中（Phase A-1 テストフェーズ）
   - 目標: 本番ドメイン（webmakeprofit.org 等）への移行（Phase A-2）
@@ -109,6 +93,30 @@
   - 現状: EC2で Postfix MX Gateway を稼働
   - 目標: Cloudflare Email Routing への移行でEC2コスト削減
   - 詳細: `docs/application/blog/issue/I007_email-routing-migration.md`
+
+- [x] **[#001] 管理ポータル（blog/mailserverの統合）**
+  - 現状: Blog System と Mailserver で管理インターフェースが分離
+  - 目標: 統合管理ポータルの構築
+  - 詳細: `docs/application/blog/issue/I001_management-portal-integration.md`
+
+- [x] **[#002] 管理ポータルのデザイン変更（モダンでスタイリッシュにする）**
+  - 現状: 既存デザインが機能的だが古風
+  - 目標: モダンなUI/UXへの刷新
+  - 詳細: `docs/application/blog/issue/I002_portal-design-modernization.md`
+
+- [x] **[#003] 管理ポータルの機能整理・追加**
+  - 現状: 必要機能の洗い出しが未完了
+  - 目標: 機能要件の明確化と実装
+  - 詳細: `docs/application/blog/issue/I003_portal-feature-enhancement.md`
+
+- [x] **[#006] キャッシュシステム（blogsystem）**
+  - 現状: WordPress デフォルトキャッシュのみ
+  - 目標: Redis/Memcached等の導入検討
+  - 詳細: `docs/application/blog/issue/I006_cache-system-implementation.md`
+
+- [x] **[#014] https://webmakesprofit.comからメールが飛ばない問題**
+ - 現状: メールが飛ばない
+ - 目標: SMTPの連携先をSendgrid直接に変更して解決
 
 ---
 
