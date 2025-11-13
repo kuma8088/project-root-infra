@@ -399,6 +399,71 @@ export const phpAPI = {
 }
 
 // ============================================================================
+// Security API Types
+// ============================================================================
+
+export interface SSLCertificate {
+  domain: string
+  issuer: string
+  valid_until: string
+  status: string
+}
+
+export interface CloudflareZone {
+  name: string
+  id: string
+  ssl_mode: string
+  status: string
+}
+
+export interface CloudflareSSLStatus {
+  zones: CloudflareZone[]
+}
+
+export interface SecurityHeaders {
+  nginx_config: string
+  headers: Record<string, string>
+}
+
+export interface SecurityStats {
+  ssl_enabled: boolean
+  https_enforced: boolean
+  cloudflare_protection: boolean
+  security_headers_enabled: boolean
+  cloudflare_zones_count: number
+}
+
+// ============================================================================
+// Security API Functions
+// ============================================================================
+
+export const securityAPI = {
+  /**
+   * List SSL certificates for blog domains
+   */
+  listSSLCertificates: () =>
+    apiFetch<SSLCertificate[]>('/api/v1/security/ssl/certificates'),
+
+  /**
+   * Get Cloudflare SSL status for all zones
+   */
+  getCloudflareSSL: () =>
+    apiFetch<CloudflareSSLStatus>('/api/v1/security/cloudflare/ssl'),
+
+  /**
+   * Get security headers configuration from Nginx
+   */
+  getSecurityHeaders: () =>
+    apiFetch<SecurityHeaders>('/api/v1/security/headers'),
+
+  /**
+   * Get security system statistics
+   */
+  getStats: () =>
+    apiFetch<SecurityStats>('/api/v1/security/stats'),
+}
+
+// ============================================================================
 // Export for convenience
 // ============================================================================
 

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import {
   Card,
@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { securityAPI } from '@/lib/api'
 
 // Mock data
 const mockSecurityStatus = {
@@ -79,6 +80,30 @@ const mockPluginStatus = [
 ]
 
 export default function SecurityManagement() {
+  const queryClient = useQueryClient()
+
+  // Query: Security stats (SSL, HTTPS, Cloudflare protection)
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['security-stats'],
+    queryFn: securityAPI.getStats,
+    refetchInterval: 60000, // Refresh every 60 seconds
+  })
+
+  // Query: SSL certificates
+  const { data: certificates } = useQuery({
+    queryKey: ['ssl-certificates'],
+    queryFn: securityAPI.listSSLCertificates,
+    refetchInterval: 300000, // Refresh every 5 minutes
+  })
+
+  // Query: Security headers
+  const { data: headers } = useQuery({
+    queryKey: ['security-headers'],
+    queryFn: securityAPI.getSecurityHeaders,
+    refetchInterval: 300000,
+  })
+
+  // Mock data for detailed checks and plugin status (Backend not yet fully implemented)
   const { data: securityStatus } = useQuery({
     queryKey: ['security-status'],
     queryFn: async () => mockSecurityStatus,
@@ -90,8 +115,41 @@ export default function SecurityManagement() {
   })
 
   const handleAction = (action: string) => {
-    console.log('Security action:', action)
-    // TODO: Implement API call
+    if (action === 'refresh') {
+      queryClient.invalidateQueries({ queryKey: ['security-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['ssl-certificates'] })
+      queryClient.invalidateQueries({ queryKey: ['security-headers'] })
+    } else {
+      console.log('Security action:', action)
+      // TODO: Implement other API calls
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-primary" />
+          <p className="text-muted-foreground">セキュリティ情報を読み込み中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" />
+          <p className="text-red-600">セキュリティ情報の取得に失敗しました</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {error instanceof Error ? error.message : '不明なエラー'}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   const getStatusColor = (status: string) => {
