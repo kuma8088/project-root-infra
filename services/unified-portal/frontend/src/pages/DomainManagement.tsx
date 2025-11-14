@@ -426,7 +426,7 @@ export default function DomainManagement() {
                   管理中のドメインとその設定状況 - 全{domains.length}ドメイン
                 </CardDescription>
               </CardHeader>
-              <CardContent className="max-h-[calc(100vh-400px)] overflow-y-auto">
+              <CardContent className="max-h-[calc(100vh_-_400px)] overflow-y-auto">
                 <div className="space-y-4">
                   {domains.map((domain) => (
                 <div
