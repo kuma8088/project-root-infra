@@ -556,6 +556,17 @@ export interface DatabaseInfo {
   size_mb: number
 }
 
+export interface DatabaseDetail extends DatabaseInfo {
+  tables_count: number
+  rows_count: number
+}
+
+export interface DatabaseStatus {
+  connected: boolean
+  version: string
+  uptime: number
+}
+
 export interface DatabaseStats {
   total_databases: number
   total_size_mb: number
@@ -568,10 +579,22 @@ export interface DatabaseStats {
 
 export const databaseAPI = {
   /**
+   * Get database connection status
+   */
+  getStatus: () =>
+    apiFetch<DatabaseStatus>('/api/v1/database/status'),
+
+  /**
    * List all databases
    */
   listDatabases: () =>
     apiFetch<DatabaseInfo[]>('/api/v1/database/list'),
+
+  /**
+   * Get detailed database information
+   */
+  getDatabaseDetail: (dbName: string) =>
+    apiFetch<DatabaseDetail>(`/api/v1/database/${dbName}/size`),
 
   /**
    * Get database statistics
