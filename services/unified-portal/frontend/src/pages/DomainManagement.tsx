@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { Globe, Plus, RefreshCw, Trash2, Mail, Lock, CheckCircle, AlertCircle, ExternalLink, Edit, Download, Upload, Search } from 'lucide-react'
 import {
   Card,
@@ -35,6 +36,7 @@ interface DomainMetadata extends Zone {
 }
 
 export default function DomainManagement() {
+  const navigate = useNavigate()
   const [showDNSModal, setShowDNSModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingRecord, setEditingRecord] = useState<DNSRecord | null>(null)
@@ -312,7 +314,19 @@ export default function DomainManagement() {
 
   const handleAction = (action: string, domain?: string) => {
     console.log('Action:', action, domain)
-    // TODO: Implement other actions
+
+    switch (action) {
+      case 'view-wp-sites':
+        // Navigate to WordPress page with domain filter
+        if (domain) {
+          navigate(`/wordpress?domain=${domain}`)
+        }
+        break
+
+      default:
+        // TODO: Implement other actions
+        break
+    }
   }
 
   return (
@@ -426,86 +440,57 @@ export default function DomainManagement() {
                   管理中のドメインとその設定状況 - 全{domains.length}ドメイン
                 </CardDescription>
               </CardHeader>
-              <CardContent className="max-h-[calc(100vh_-_400px)] overflow-y-auto">
-                <div className="space-y-4">
+              <CardContent className="max-h-[calc(100vh_-_400px)] overflow-y-auto p-3">
+                <div className="space-y-2">
                   {domains.map((domain) => (
-                <div
-                  key={domain.id}
-                  className={`flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer ${
-                    selectedDomain === domain.name ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300' : ''
-                  }`}
-                  onClick={() => setSelectedDomain(domain.name)}
-                >
-                  <div className="flex items-center gap-4">
-                    <Globe className="h-8 w-8 text-primary" />
-                    <div>
-                      <h3 className="font-semibold">{domain.name}</h3>
-                      <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          domain.status === 'active'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
-                        }`}>
-                          {domain.status}
-                        </span>
-                        {domain.mailEnabled && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="h-4 w-4" />
-                            Mail有効
-                          </span>
-                        )}
-                        {domain.wordpressEnabled && (
-                          <span className="flex items-center gap-1">
-                            <Globe className="h-4 w-4" />
-                            WP有効
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex gap-2 text-xs text-muted-foreground mt-1">
-                        <span>NS: {domain.name_servers.slice(0, 2).join(', ')}</span>
+                    <div
+                      key={domain.id}
+                      className={`p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer ${
+                        selectedDomain === domain.name ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500' : ''
+                      }`}
+                      onClick={() => setSelectedDomain(domain.name)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Globe className="h-5 w-5 text-primary flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm truncate">{domain.name}</h3>
+                            <div className="flex gap-2 mt-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                domain.status === 'active'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                              }`}>
+                                {domain.status}
+                              </span>
+                              {domain.mailEnabled && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-xs">
+                                  <Mail className="h-3 w-3" />
+                                  Mail
+                                </span>
+                              )}
+                              {domain.wordpressEnabled && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs">
+                                  <Globe className="h-3 w-3" />
+                                  WP
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {domain.sslStatus === 'active' ? (
+                            <div title="SSL Active">
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            </div>
+                          ) : (
+                            <div title="SSL Pending">
+                              <AlertCircle className="h-4 w-4 text-yellow-600" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="flex gap-2">
-                      {domain.sslStatus === 'active' ? (
-                        <div className="flex items-center gap-1 text-green-600">
-                          <CheckCircle className="h-4 w-4" />
-                          <span className="text-sm">Active</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-yellow-600">
-                          <AlertCircle className="h-4 w-4" />
-                          <span className="text-sm">Pending</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        window.open(`https://dash.cloudflare.com/${domain.id}/dns`, '_blank')
-                      }}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Cloudflareで管理
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setActiveTab('dns')
-                      }}
-                    >
-                      DNS管理
-                    </Button>
-                  </div>
-                </div>
                   ))}
                 </div>
               </CardContent>

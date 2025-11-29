@@ -10,13 +10,26 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
 
+  // Get authentication token from localStorage
+  const token = localStorage.getItem('token')
+
+  // Build headers with authentication if token exists
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  if (options?.headers) {
+    Object.assign(headers, options.headers)
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     })
 
     if (!response.ok) {
@@ -337,8 +350,12 @@ export interface ManagedWordPressSite {
 export interface ManagedSiteCreate {
   site_name: string
   domain: string
-  database_name?: string
+  database_name: string
   php_version: string
+  admin_user: string
+  admin_password: string
+  admin_email: string
+  title?: string
 }
 
 export interface ManagedSiteUpdate {
@@ -554,6 +571,8 @@ export const adminUserAPI = {
 export interface DatabaseInfo {
   name: string
   size_mb: number
+  wordpress_site?: string
+  wordpress_url?: string
 }
 
 export interface DatabaseDetail extends DatabaseInfo {

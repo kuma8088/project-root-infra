@@ -8,7 +8,10 @@ from typing import Any
 
 from jinja2 import Template
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 # Nginx configuration template for WordPress sites
@@ -49,7 +52,7 @@ server {
     location ~ \.php$ {
         try_files $uri =404;
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass php-{{ php_version }}:9000;
+        fastcgi_pass wordpress:9000;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param HTTPS $https_forwarded;
@@ -83,15 +86,15 @@ class NginxConfigService:
     for WordPress sites and other services.
     """
 
-    def __init__(self, config_dir: str = "/etc/nginx/conf.d", nginx_bin: str = "nginx"):
+    def __init__(self, config_dir: str | None = None, nginx_container: str | None = None):
         """Initialize Nginx config service.
 
         Args:
-            config_dir: Nginx configuration directory
-            nginx_bin: Path to nginx binary
+            config_dir: Nginx configuration directory (defaults to settings)
+            nginx_container: Nginx container name (defaults to settings)
         """
-        self.config_dir = Path(config_dir)
-        self.nginx_bin = nginx_bin
+        self.config_dir = Path(config_dir or settings.nginx_config_dir)
+        self.nginx_container = nginx_container or settings.nginx_container_name
 
     def generate_wordpress_config(
         self,
@@ -123,7 +126,7 @@ class NginxConfigService:
         )
 
     def write_config(self, filename: str, content: str) -> Path:
-        """Write Nginx configuration to file.
+        """Write Nginx configuration to file using docker exec.
 
         Args:
             filename: Configuration filename (e.g., kuma8088-main.conf)
@@ -134,27 +137,57 @@ class NginxConfigService:
         """
         config_path = self.config_dir / filename
 
+        # Write config using docker exec to bypass read-only mount
+        # Host path: /opt/onprem-infra-system/project-root-infra/services/blog/config/nginx/conf.d/
+        # Container path: /etc/nginx/conf.d/
+        container_path = f"/etc/nginx/conf.d/{filename}"
+
         try:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(content, encoding="utf-8")
-            logger.info(f"Nginx configuration written: {config_path}")
+            # Use docker exec with tee to write file inside nginx container
+            result = subprocess.run(
+                ["docker", "exec", "-i", self.nginx_container, "tee", container_path],
+                input=content,
+                text=True,
+                capture_output=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                raise IOError(f"Docker exec failed: {result.stderr}")
+
+            logger.info(f"Nginx configuration written via docker exec: {container_path}")
             return config_path
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout writing Nginx config")
+            raise IOError(f"Timeout writing Nginx configuration")
         except Exception as e:
             logger.error(f"Failed to write Nginx config: {e}")
             raise IOError(f"Failed to write Nginx configuration: {e}")
 
     def delete_config(self, filename: str) -> None:
-        """Delete Nginx configuration file.
+        """Delete Nginx configuration file using docker exec.
 
         Args:
             filename: Configuration filename
         """
-        config_path = self.config_dir / filename
+        container_path = f"/etc/nginx/conf.d/{filename}"
 
         try:
-            if config_path.exists():
-                config_path.unlink()
-                logger.info(f"Nginx configuration deleted: {config_path}")
+            # Use docker exec to delete file inside nginx container
+            result = subprocess.run(
+                ["docker", "exec", self.nginx_container, "rm", "-f", container_path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0 and "No such file" not in result.stderr:
+                raise IOError(f"Docker exec delete failed: {result.stderr}")
+
+            logger.info(f"Nginx configuration deleted via docker exec: {container_path}")
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout deleting Nginx config")
+            raise IOError(f"Timeout deleting Nginx configuration")
         except Exception as e:
             logger.error(f"Failed to delete Nginx config: {e}")
             raise IOError(f"Failed to delete Nginx configuration: {e}")
@@ -166,8 +199,9 @@ class NginxConfigService:
             True if configuration is valid, False otherwise
         """
         try:
+            # Execute nginx -t inside the nginx container
             result = subprocess.run(
-                [self.nginx_bin, "-t"],
+                ["docker", "exec", self.nginx_container, "nginx", "-t"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -193,8 +227,9 @@ class NginxConfigService:
             True if reload successful, False otherwise
         """
         try:
+            # Execute nginx -s reload inside the nginx container
             result = subprocess.run(
-                [self.nginx_bin, "-s", "reload"],
+                ["docker", "exec", self.nginx_container, "nginx", "-s", "reload"],
                 capture_output=True,
                 text=True,
                 timeout=10,

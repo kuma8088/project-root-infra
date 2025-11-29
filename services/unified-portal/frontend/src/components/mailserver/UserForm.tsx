@@ -28,8 +28,7 @@ export function UserForm({
     password: '',
     domain_id: preselectedDomainId?.toString() || '',
     quota: '1024',
-    is_active: true,
-    is_admin: false,
+    enabled: true,
   })
   const [domains, setDomains] = useState<MailDomain[]>([])
   const [loading, setLoading] = useState(false)
@@ -45,9 +44,8 @@ export function UserForm({
         email: user.email,
         password: '',
         domain_id: user.domain_id.toString(),
-        quota: Math.round(user.quota / 1024 / 1024).toString(),
-        is_active: user.is_active,
-        is_admin: user.is_admin,
+        quota: user.quota.toString(),
+        enabled: user.enabled,
       })
     } else if (preselectedDomainId !== null) {
       setFormData((prev) => ({
@@ -60,7 +58,7 @@ export function UserForm({
   const loadDomains = async () => {
     try {
       const response = await mailDomainAPI.list(0, 100)
-      setDomains(response.domains.filter((d) => d.is_active))
+      setDomains(response.domains.filter((d) => d.enabled))
     } catch (err) {
       console.error('Failed to load domains:', err)
     }
@@ -77,9 +75,8 @@ export function UserForm({
       if (user) {
         // Update existing user
         const data: MailUserUpdate = {
-          quota: parseInt(formData.quota) * 1024 * 1024,
-          is_active: formData.is_active,
-          is_admin: formData.is_admin,
+          quota: parseInt(formData.quota),
+          enabled: formData.enabled,
         }
 
         if (formData.password) {
@@ -93,9 +90,8 @@ export function UserForm({
           email: formData.email,
           password: formData.password,
           domain_id: parseInt(formData.domain_id),
-          quota: parseInt(formData.quota) * 1024 * 1024,
-          is_active: formData.is_active,
-          is_admin: formData.is_admin,
+          quota: parseInt(formData.quota),
+          enabled: formData.enabled,
         }
 
         result = await mailUserAPI.create(data)
@@ -142,7 +138,7 @@ export function UserForm({
               <option value="">ドメインを選択</option>
               {domains.map((domain) => (
                 <option key={domain.id} value={domain.id}>
-                  {domain.domain_name}
+                  {domain.name}
                 </option>
               ))}
             </select>
@@ -172,7 +168,7 @@ export function UserForm({
                   )
                   setFormData({
                     ...formData,
-                    email: domain ? `${localPart}@${domain.domain_name}` : localPart,
+                    email: domain ? `${localPart}@${domain.name}` : localPart,
                   })
                 }}
                 placeholder="username"
@@ -182,7 +178,7 @@ export function UserForm({
               />
               {!user && formData.domain_id && (
                 <span className="flex items-center px-3 py-2 bg-muted rounded-md text-sm">
-                  @{domains.find((d) => d.id === parseInt(formData.domain_id))?.domain_name}
+                  @{domains.find((d) => d.id === parseInt(formData.domain_id))?.name}
                 </span>
               )}
             </div>
@@ -232,25 +228,13 @@ export function UserForm({
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={formData.is_active}
+                checked={formData.enabled}
                 onChange={(e) =>
-                  setFormData({ ...formData, is_active: e.target.checked })
+                  setFormData({ ...formData, enabled: e.target.checked })
                 }
                 className="rounded border-gray-300"
               />
               <span className="text-sm font-medium">有効</span>
-            </label>
-
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={formData.is_admin}
-                onChange={(e) =>
-                  setFormData({ ...formData, is_admin: e.target.checked })
-                }
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm font-medium">管理者権限</span>
             </label>
           </div>
 

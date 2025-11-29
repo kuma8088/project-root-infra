@@ -7,6 +7,7 @@ import secrets
 import string
 from typing import Any, Dict, List, Literal, Optional
 
+import pymysql
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -84,7 +85,12 @@ class DatabaseService:
             else:
                 raise ValueError(f"Invalid target system: {target}")
 
-            self._engines[target] = create_engine(url, pool_pre_ping=True)
+            # Create engine with isolation_level="AUTOCOMMIT" for DDL operations
+            self._engines[target] = create_engine(
+                url,
+                pool_pre_ping=True,
+                isolation_level="AUTOCOMMIT"
+            )
 
         return self._engines[target]
 
@@ -152,26 +158,74 @@ class DatabaseService:
         Raises:
             ValueError: If creation fails
         """
+        print(f"🔍 DEBUG: create_database called with database_name={db_create.database_name}, target_system={db_create.target_system}")
         engine = self._get_engine(db_create.target_system)
+        print(f"🔍 DEBUG: Engine obtained: {engine.url}")
 
         # Defense-in-depth: Sanitize identifiers (Pydantic should already validate)
         safe_db_name = self._sanitize_identifier(db_create.database_name)
         safe_charset = db_create.charset  # Already validated by Pydantic whitelist
         safe_collation = db_create.collation  # Already validated by Pydantic whitelist
 
+        print(f"🔍 DEBUG: Sanitized values - db_name={safe_db_name}, charset={safe_charset}, collation={safe_collation}")
+
+        # Get connection parameters from engine URL
+        if db_create.target_system == "blog":
+            db_host = settings.blog_db_host
+            db_port = settings.blog_db_port
+            db_user = settings.blog_db_user
+            db_password = settings.blog_db_password
+        elif db_create.target_system == "mailserver":
+            db_host = settings.mailserver_db_host
+            db_port = settings.mailserver_db_port
+            db_user = "root"  # Assuming root for mailserver
+            db_password = settings.mailserver_database_url.split(":")[-2].split("@")[0]
+        else:
+            raise ValueError(f"Invalid target system: {db_create.target_system}")
+
+        print(f"🔍 DEBUG: Connecting to {db_host}:{db_port} as {db_user}")
+
         try:
-            with engine.connect() as conn:
-                # Create database
-                # Note: DDL statements don't support parameterized queries in MySQL/MariaDB
-                # Identifiers are validated by Pydantic + _sanitize_identifier for defense-in-depth
-                conn.execute(
-                    text(
-                        f"CREATE DATABASE `{safe_db_name}` "
-                        f"CHARACTER SET {safe_charset} "
-                        f"COLLATE {safe_collation}"
-                    )
-                )
-                conn.commit()
+            # Use raw PyMySQL to bypass SQLAlchemy transaction management
+            # PyMySQL auto-commits DDL statements by default
+            connection = pymysql.connect(
+                host=db_host,
+                port=db_port,
+                user=db_user,
+                password=db_password,
+                autocommit=True  # Ensure autocommit for DDL
+            )
+            print(f"🔍 DEBUG: PyMySQL connection established")
+
+            try:
+                with connection.cursor() as cursor:
+                    # Create database with IF NOT EXISTS to handle existing databases gracefully
+                    sql_statement = f"CREATE DATABASE IF NOT EXISTS `{safe_db_name}` CHARACTER SET {safe_charset} COLLATE {safe_collation}"
+                    print(f"🔍 DEBUG: About to execute SQL: {sql_statement}")
+
+                    cursor.execute(sql_statement)
+                    print(f"🔍 DEBUG: SQL executed successfully with PyMySQL")
+
+                    # Verify database was created
+                    cursor.execute(f"SHOW DATABASES LIKE '{safe_db_name}'")
+                    verify_rows = cursor.fetchall()
+                    print(f"🔍 DEBUG: Verification - found {len(verify_rows)} databases matching '{safe_db_name}'")
+                    if verify_rows:
+                        print(f"🔍 DEBUG: Database verified: {verify_rows[0][0]}")
+                    else:
+                        print(f"🔍 DEBUG: WARNING - Database NOT found immediately after creation!")
+
+                    # Grant privileges to wpuser for WordPress sites
+                    if db_create.target_system == "blog":
+                        wp_user = settings.blog_wp_db_user
+                        grant_sql = f"GRANT ALL PRIVILEGES ON `{safe_db_name}`.* TO '{wp_user}'@'%'"
+                        print(f"🔍 DEBUG: Granting privileges to {wp_user}: {grant_sql}")
+                        cursor.execute(grant_sql)
+                        cursor.execute("FLUSH PRIVILEGES")
+                        print(f"🔍 DEBUG: Privileges granted successfully to {wp_user}")
+            finally:
+                connection.close()
+                print(f"🔍 DEBUG: PyMySQL connection closed")
 
                 # Create dedicated user if requested
                 if db_create.create_user:
@@ -212,8 +266,12 @@ class DatabaseService:
                 )
 
         except SQLAlchemyError as e:
+            print(f"🔍 DEBUG: SQLAlchemyError caught: {type(e).__name__} - {e}")
             logger.error(f"Failed to create database: {e}")
             raise ValueError(f"Failed to create database: {e}")
+        except Exception as e:
+            print(f"🔍 DEBUG: Unexpected exception caught: {type(e).__name__} - {e}")
+            raise
 
     def delete_database(self, database_name: str, target: Literal["blog", "mailserver"]) -> None:
         """Delete a database.

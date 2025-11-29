@@ -6,6 +6,7 @@ import DatabaseManagement from './pages/DatabaseManagement'
 import PhpManagement from './pages/PhpManagement'
 import SecurityManagement from './pages/SecurityManagement'
 import WordPressManagement from './pages/WordPressManagement'
+import CreateManagedSitePage from './pages/CreateManagedSitePage'
 import DomainManagement from './pages/DomainManagement'
 import MailserverManagement from './pages/MailserverManagement'
 import Login from './pages/Login'
@@ -34,6 +35,7 @@ function App() {
             <Route path="/php" element={<PhpManagement />} />
             <Route path="/security" element={<SecurityManagement />} />
             <Route path="/wordpress" element={<WordPressManagement />} />
+            <Route path="/wordpress/create" element={<CreateManagedSitePage />} />
             <Route path="/domains" element={<DomainManagement />} />
             <Route path="/mailserver" element={<MailserverManagement />} />
           </Route>

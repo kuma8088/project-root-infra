@@ -8,13 +8,14 @@ services:
     env_file:
       - .env
     environment:
-      - DATABASE_URL=mysql+pymysql://usermgmt:${USERMGMT_DB_PASSWORD}@172.20.0.60:3306/unified_portal
+      # DATABASE_URL is loaded from .env file
       - CORS_ORIGINS=["http://172.20.0.91:5173","http://localhost:5173","http://172.20.0.91","https://admin.kuma8088.com"]
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./backend:/app
       - /mnt/backup-hdd:/mnt/backup-hdd:ro
+      - /opt/onprem-infra-system/project-root-infra/services/blog:/opt/onprem-infra-system/project-root-infra/services/blog
     ports:
       - "8000:8000"
     networks:

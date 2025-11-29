@@ -388,6 +388,7 @@ docker compose up -d
     - `setup-wp-mail-smtp.sh` - WP Mail SMTP一括設定
     - `check-wp-mail-smtp.sh` - SMTP設定確認
     - `generate-nginx-subdirectories.sh` - Nginx設定生成
+    - `fix-permissions.sh` - 全サイトのパーミッション一括修正（プラグインアップデート対応）
 
 ## 🔧 よく使うコマンド
 
@@ -492,6 +493,13 @@ terraform output
 詳細: [services/mailserver/troubleshoot/README.md](services/mailserver/troubleshoot/README.md)
 
 ### Blog System
+- **プラグイン/テーマアップデート失敗** ✅ **解決済み**（2025-11-28）:
+  - **症状**: WordPress管理画面からプラグイン/テーマのアップデートができない
+  - **根本原因**: wp-content以下のファイルが`1000:1000`所有で、PHP-FPM (`82:82` www-data) が書き込めない
+  - **影響範囲**: 全16サイト、約148,000ファイル
+  - **解決策**: `./scripts/fix-permissions.sh` で所有者をwww-dataに一括変更
+  - **予防**: ファイルコピー/リストア後は必ずパーミッション修正スクリプトを実行
+  - 詳細: [docs/work-notes/blog/2025-11-28-plugin-update-permission-fix.md](docs/work-notes/blog/2025-11-28-plugin-update-permission-fix.md)
 - **P011: kuma8088.com表示問題** ✅ **解決済み**（2025-11-11）:
   - **症状**: blog.kuma8088.com配下10サイトでElementorプレビュー/静的ファイル404
   - **根本原因**: Nginx HTTPS検出パラメータ欠落

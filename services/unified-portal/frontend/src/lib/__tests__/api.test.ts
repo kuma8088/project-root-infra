@@ -185,6 +185,9 @@ describe('API Functions', () => {
         domain: 'new.example.com',
         database_name: 'new_db',
         php_version: '8.3',
+        admin_user: 'admin',
+        admin_password: 'testpassword123',
+        admin_email: 'admin@example.com',
       }
 
       const mockResponse = {
