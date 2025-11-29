@@ -46,7 +46,7 @@ export function DomainList({
   }
 
   const handleDelete = async (domain: MailDomain) => {
-    if (!confirm(`本当にドメイン「${domain.domain_name}」を削除しますか？`)) {
+    if (!confirm(`本当にドメイン「${domain.name}」を削除しますか？`)) {
       return
     }
 
@@ -105,26 +105,25 @@ export function DomainList({
                 className="flex items-center justify-between border rounded-lg p-4"
               >
                 <div className="flex-1">
-                  <h4 className="font-semibold text-lg">{domain.domain_name}</h4>
+                  <h4 className="font-semibold text-lg">{domain.name}</h4>
+                  {domain.description && (
+                    <p className="text-sm text-muted-foreground">{domain.description}</p>
+                  )}
                   <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
                     <span>
                       ステータス:{' '}
                       <span
                         className={
-                          domain.is_active ? 'text-green-600' : 'text-gray-500'
+                          domain.enabled ? 'text-green-600' : 'text-gray-500'
                         }
                       >
-                        {domain.is_active ? '有効' : '無効'}
+                        {domain.enabled ? '有効' : '無効'}
                       </span>
                     </span>
-                    {domain.max_users !== null && (
-                      <span>最大ユーザー数: {domain.max_users}</span>
-                    )}
-                    {domain.max_quota !== null && (
-                      <span>
-                        最大容量: {Math.round(domain.max_quota / 1024 / 1024)} MB
-                      </span>
-                    )}
+                    <span>ユーザー数: {domain.user_count}</span>
+                    <span>
+                      使用容量: {domain.total_quota_used} MB / デフォルト: {domain.default_quota} MB
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     作成日: {new Date(domain.created_at).toLocaleString('ja-JP')}

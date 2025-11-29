@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     blog_db_user: str = "root"
     blog_db_password: str = "password"
 
+    # WordPress Database User (for wp-cli config create)
+    blog_wp_db_user: str = "wpuser"
+    blog_wp_db_password: str = "password"
+
     # Encryption (Fernet symmetric encryption for database credentials)
     encryption_key: str = "change-this-to-a-valid-fernet-key-in-production"
 
@@ -62,6 +66,12 @@ class Settings(BaseSettings):
 
     # Cloudflare API
     cloudflare_api_token: str = ""
+    cloudflare_account_id: str = ""
+    cloudflare_tunnel_id: str = ""
+
+    # Nginx Configuration (for Blog System management)
+    nginx_config_dir: str = "/etc/nginx/conf.d"
+    nginx_container_name: str = "blog-nginx"
 
     # SMTP Email Settings (for password reset, welcome emails, etc.)
     smtp_host: str = "localhost"

@@ -18,10 +18,10 @@ interface DomainFormProps {
 
 export function DomainForm({ domain, onSuccess, onCancel }: DomainFormProps) {
   const [formData, setFormData] = useState({
-    domain_name: '',
-    is_active: true,
-    max_users: '',
-    max_quota: '',
+    name: '',
+    description: '',
+    default_quota: '1024',
+    enabled: true,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,12 +29,10 @@ export function DomainForm({ domain, onSuccess, onCancel }: DomainFormProps) {
   useEffect(() => {
     if (domain) {
       setFormData({
-        domain_name: domain.domain_name,
-        is_active: domain.is_active,
-        max_users: domain.max_users !== null ? domain.max_users.toString() : '',
-        max_quota: domain.max_quota !== null
-          ? Math.round(domain.max_quota / 1024 / 1024).toString()
-          : '',
+        name: domain.name,
+        description: domain.description || '',
+        default_quota: domain.default_quota.toString(),
+        enabled: domain.enabled,
       })
     }
   }, [domain])
@@ -45,20 +43,22 @@ export function DomainForm({ domain, onSuccess, onCancel }: DomainFormProps) {
     setError(null)
 
     try {
-      const data: MailDomainCreate | MailDomainUpdate = {
-        domain_name: formData.domain_name,
-        is_active: formData.is_active,
-        max_users: formData.max_users ? parseInt(formData.max_users) : null,
-        max_quota: formData.max_quota
-          ? parseInt(formData.max_quota) * 1024 * 1024
-          : null,
-      }
-
       let result: MailDomain
       if (domain) {
+        const data: MailDomainUpdate = {
+          description: formData.description || null,
+          default_quota: parseInt(formData.default_quota),
+          enabled: formData.enabled,
+        }
         result = await mailDomainAPI.update(domain.id, data)
       } else {
-        result = await mailDomainAPI.create(data as MailDomainCreate)
+        const data: MailDomainCreate = {
+          name: formData.name,
+          description: formData.description || null,
+          default_quota: parseInt(formData.default_quota),
+          enabled: formData.enabled,
+        }
+        result = await mailDomainAPI.create(data)
       }
 
       if (onSuccess) onSuccess(result)
@@ -92,9 +92,9 @@ export function DomainForm({ domain, onSuccess, onCancel }: DomainFormProps) {
             </label>
             <input
               type="text"
-              value={formData.domain_name}
+              value={formData.name}
               onChange={(e) =>
-                setFormData({ ...formData, domain_name: e.target.value })
+                setFormData({ ...formData, name: e.target.value })
               }
               placeholder="example.com"
               required
@@ -109,49 +109,50 @@ export function DomainForm({ domain, onSuccess, onCancel }: DomainFormProps) {
           </div>
 
           <div>
+            <label className="block text-sm font-medium mb-2">
+              説明（オプション）
+            </label>
+            <input
+              type="text"
+              value={formData.description}
+              onChange={(e) =>
+                setFormData({ ...formData, description: e.target.value })
+              }
+              placeholder="ドメインの説明"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              デフォルト容量（MB） <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="number"
+              value={formData.default_quota}
+              onChange={(e) =>
+                setFormData({ ...formData, default_quota: e.target.value })
+              }
+              placeholder="1024"
+              required
+              min="100"
+              max="10000"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          <div>
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={formData.is_active}
+                checked={formData.enabled}
                 onChange={(e) =>
-                  setFormData({ ...formData, is_active: e.target.checked })
+                  setFormData({ ...formData, enabled: e.target.checked })
                 }
                 className="rounded border-gray-300"
               />
               <span className="text-sm font-medium">有効</span>
             </label>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              最大ユーザー数（オプション）
-            </label>
-            <input
-              type="number"
-              value={formData.max_users}
-              onChange={(e) =>
-                setFormData({ ...formData, max_users: e.target.value })
-              }
-              placeholder="無制限"
-              min="1"
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              最大容量（MB、オプション）
-            </label>
-            <input
-              type="number"
-              value={formData.max_quota}
-              onChange={(e) =>
-                setFormData({ ...formData, max_quota: e.target.value })
-              }
-              placeholder="無制限"
-              min="1"
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-            />
           </div>
 
           <div className="flex gap-2 pt-4">

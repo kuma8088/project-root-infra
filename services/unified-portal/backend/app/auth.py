@@ -130,3 +130,28 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise credentials_exception
 
     return token_data.username
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
+) -> Optional[str]:
+    """Verify JWT token and return current user (optional authentication).
+
+    Args:
+        credentials: Optional HTTP Authorization credentials with Bearer token.
+
+    Returns:
+        Optional[str]: Username from token if valid, None otherwise.
+    """
+    if credentials is None:
+        return None
+
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+        return username
+    except JWTError:
+        return None

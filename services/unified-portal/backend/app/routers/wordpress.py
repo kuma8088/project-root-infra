@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import subprocess
 import json
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_current_user_optional
 from app.database import get_db
 from app.schemas.wordpress import (
     WordPressCacheOperation,
@@ -411,7 +411,7 @@ async def get_wordpress_stats():
 def list_managed_wordpress_sites(
     enabled_only: bool = False,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: Optional[str] = Depends(get_current_user_optional),
 ):
     """
     List all managed WordPress sites from database.
@@ -422,7 +422,7 @@ def list_managed_wordpress_sites(
     Args:
         enabled_only: Only return enabled sites
         db: Database session
-        current_user: Current authenticated user
+        current_user: Optional current authenticated user
 
     Returns:
         List of managed WordPress sites
@@ -436,7 +436,7 @@ def list_managed_wordpress_sites(
 def get_managed_wordpress_site(
     site_id: int,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: Optional[str] = Depends(get_current_user_optional),
 ):
     """
     Get managed WordPress site by ID.
@@ -444,7 +444,7 @@ def get_managed_wordpress_site(
     Args:
         site_id: Site ID
         db: Database session
-        current_user: Current authenticated user
+        current_user: Optional current authenticated user
 
     Returns:
         WordPress site details
@@ -462,7 +462,7 @@ def get_managed_wordpress_site(
 
 
 @router.post("/managed-sites", response_model=WordPressSiteResponse, status_code=201)
-def create_managed_wordpress_site(
+async def create_managed_wordpress_site(
     site_data: WordPressSiteCreate,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
@@ -473,8 +473,12 @@ def create_managed_wordpress_site(
     Steps:
     1. Validate site data
     2. Create database record
-    3. Generate Nginx configuration
-    4. Reload Nginx
+    3. Create MariaDB database
+    4. Install WordPress via wp-cli
+    5. Configure WP Mail SMTP
+    6. Generate Nginx configuration
+    7. Reload Nginx
+    8. Setup Cloudflare Tunnel + DNS (automatic)
 
     Args:
         site_data: Site creation data
@@ -490,7 +494,7 @@ def create_managed_wordpress_site(
     service = get_wordpress_service(db)
 
     try:
-        site = service.create_site(site_data)
+        site = await service.create_site(site_data)
         return site
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -558,7 +562,7 @@ def delete_managed_wordpress_site(
 def get_managed_site_stats(
     site_id: int,
     db: Session = Depends(get_db),
-    current_user: str = Depends(get_current_user),
+    current_user: Optional[str] = Depends(get_current_user_optional),
 ):
     """
     Get managed WordPress site statistics.
@@ -566,7 +570,7 @@ def get_managed_site_stats(
     Args:
         site_id: Site ID
         db: Database session
-        current_user: Current authenticated user
+        current_user: Optional current authenticated user
 
     Returns:
         Site statistics (posts, pages, plugins, themes, users, db size)

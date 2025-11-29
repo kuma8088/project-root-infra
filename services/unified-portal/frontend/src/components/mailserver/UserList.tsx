@@ -126,7 +126,7 @@ export function UserList({
                       {user.domain_name}
                     </td>
                     <td className="p-3 text-sm">
-                      {Math.round(user.quota / 1024 / 1024)} MB
+                      {user.quota} MB
                     </td>
                     <td className="p-3">
                       <span
@@ -142,12 +142,12 @@ export function UserList({
                     <td className="p-3">
                       <span
                         className={`text-xs px-2 py-1 rounded ${
-                          user.is_active
+                          user.enabled
                             ? 'bg-green-100 text-green-700'
                             : 'bg-gray-100 text-gray-700'
                         }`}
                       >
-                        {user.is_active ? '有効' : '無効'}
+                        {user.enabled ? '有効' : '無効'}
                       </span>
                     </td>
                     <td className="p-3 text-sm text-muted-foreground">

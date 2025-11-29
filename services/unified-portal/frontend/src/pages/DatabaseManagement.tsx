@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, Plus, Trash2, RefreshCw, Download, Upload, Search, AlertCircle, Info } from 'lucide-react'
+import { Database, Plus, Trash2, RefreshCw, Download, Upload, Search, AlertCircle, Info, Globe } from 'lucide-react'
 import {
   Card,
   CardContent,
@@ -196,17 +196,40 @@ export default function DatabaseManagement() {
                 key={db.name}
                 className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <Database className="h-8 w-8 text-primary" />
-                  <div>
+                <div className="flex items-center gap-4 flex-1">
+                  <Database className="h-8 w-8 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold">{db.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {db.size_mb.toFixed(2)} MB
-                    </p>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                      <span>{db.size_mb.toFixed(2)} MB</span>
+                      {db.wordpress_site && (
+                        <>
+                          <span>•</span>
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-3.5 w-3.5" />
+                            <a
+                              href={db.wordpress_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-primary hover:underline truncate"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {db.wordpress_site}
+                            </a>
+                          </div>
+                        </>
+                      )}
+                      {!db.wordpress_site && (
+                        <>
+                          <span>•</span>
+                          <span className="text-gray-400 italic">WordPress未関連</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <Button
                     size="sm"
                     variant="outline"
@@ -238,17 +261,19 @@ export default function DatabaseManagement() {
                   >
                     <Upload className="h-4 w-4" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleAction('delete', db.name)
-                    }}
-                    title="削除"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {db.wordpress_site && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAction('delete', db.name)
+                      }}
+                      title="削除"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

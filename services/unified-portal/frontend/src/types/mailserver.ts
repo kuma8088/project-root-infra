@@ -13,10 +13,9 @@ export interface MailUser {
   domain_id: number;
   domain_name: string;
   quota: number;
-  is_active: boolean;
+  enabled: boolean;
   is_admin: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 /**
@@ -27,19 +26,16 @@ export interface MailUserCreate {
   password: string;
   domain_id: number;
   quota?: number;
-  is_active?: boolean;
-  is_admin?: boolean;
+  enabled?: boolean;
 }
 
 /**
  * Mail User Update Request
  */
 export interface MailUserUpdate {
-  email?: string;
   password?: string;
   quota?: number;
-  is_active?: boolean;
-  is_admin?: boolean;
+  enabled?: boolean;
 }
 
 /**
@@ -47,32 +43,32 @@ export interface MailUserUpdate {
  */
 export interface MailDomain {
   id: number;
-  domain_name: string;
-  is_active: boolean;
-  max_users: number | null;
-  max_quota: number | null;
+  name: string;
+  description: string | null;
+  default_quota: number;
+  enabled: boolean;
+  user_count: number;
+  total_quota_used: number;
   created_at: string;
-  updated_at: string;
 }
 
 /**
  * Mail Domain Creation Request
  */
 export interface MailDomainCreate {
-  domain_name: string;
-  is_active?: boolean;
-  max_users?: number | null;
-  max_quota?: number | null;
+  name: string;
+  description?: string | null;
+  default_quota?: number;
+  enabled?: boolean;
 }
 
 /**
  * Mail Domain Update Request
  */
 export interface MailDomainUpdate {
-  domain_name?: string;
-  is_active?: boolean;
-  max_users?: number | null;
-  max_quota?: number | null;
+  description?: string | null;
+  default_quota?: number;
+  enabled?: boolean;
 }
 
 /**

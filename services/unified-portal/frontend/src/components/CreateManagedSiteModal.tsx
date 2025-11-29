@@ -19,24 +19,85 @@ interface CreateManagedSiteModalProps {
   onClose: () => void
 }
 
+// Available base domains
+const BASE_DOMAINS = [
+  { value: 'kuma8088.com', label: 'kuma8088.com' },
+  { value: 'fx-trader-life.com', label: 'fx-trader-life.com' },
+  { value: 'webmakeprofit.org', label: 'webmakeprofit.org' },
+  { value: 'webmakesprofit.com', label: 'webmakesprofit.com' },
+  { value: 'toyota-phv.jp', label: 'toyota-phv.jp' },
+]
+
+// MySQL reserved words (common ones)
+const MYSQL_RESERVED_WORDS = [
+  'mysql', 'information_schema', 'performance_schema', 'sys',
+  'admin', 'root', 'test', 'temp', 'tmp',
+  'select', 'insert', 'update', 'delete', 'drop', 'create',
+  'table', 'database', 'index', 'view', 'user',
+]
+
+// WordPress core prefixes
+const WP_RESERVED_PREFIXES = ['wp_']
+
 export default function CreateManagedSiteModal({
   isOpen,
   onClose,
 }: CreateManagedSiteModalProps) {
   const queryClient = useQueryClient()
+  const [baseDomain, setBaseDomain] = useState('kuma8088.com')
+  const [subdomain, setSubdomain] = useState('')
   const [formData, setFormData] = useState<ManagedSiteCreate>({
     site_name: '',
     domain: '',
     database_name: '',
     php_version: '8.2',
+    admin_user: 'admin',
+    admin_password: '',
+    admin_email: '',
+    title: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
+  const [currentStep, setCurrentStep] = useState(0)
+
+  // Calculate full domain from subdomain + base domain
+  const fullDomain = subdomain ? `${subdomain}.${baseDomain}` : baseDomain
+
+  // Creation steps for progress display
+  const creationSteps = [
+    'データベースを作成中...',
+    'WordPressをインストール中...',
+    'WP Mail SMTPを設定中...',
+    'Nginx設定を生成中...',
+    'Nginxをリロード中...',
+    'Cloudflare Tunnelを設定中...',
+  ]
 
   // Mutation: Create site
   const createMutation = useMutation({
-    mutationFn: (data: ManagedSiteCreate) => managedSitesAPI.createSite(data),
+    mutationFn: (data: ManagedSiteCreate) => {
+      // Start step progression simulation
+      setCurrentStep(0)
+      const stepInterval = setInterval(() => {
+        setCurrentStep((prev) => {
+          if (prev < creationSteps.length - 1) {
+            return prev + 1
+          }
+          return prev
+        })
+      }, 3000) // Progress every 3 seconds (estimated)
+
+      // Store interval ID for cleanup
+      ;(createMutation as any).stepInterval = stepInterval
+
+      return managedSitesAPI.createSite(data)
+    },
     onSuccess: () => {
+      // Clear step progression interval
+      if ((createMutation as any).stepInterval) {
+        clearInterval((createMutation as any).stepInterval)
+      }
+      setCurrentStep(creationSteps.length - 1)
       setSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['managed-sites'] })
       setTimeout(() => {
@@ -44,6 +105,11 @@ export default function CreateManagedSiteModal({
       }, 2000)
     },
     onError: (error: Error) => {
+      // Clear step progression interval
+      if ((createMutation as any).stepInterval) {
+        clearInterval((createMutation as any).stepInterval)
+      }
+      setCurrentStep(0)
       setErrors({ submit: error.message })
     },
   })
@@ -54,25 +120,91 @@ export default function CreateManagedSiteModal({
     // Site name validation
     if (!formData.site_name) {
       newErrors.site_name = 'サイト名は必須です'
+    } else if (formData.site_name.length > 100) {
+      newErrors.site_name = 'サイト名は100文字以内で入力してください'
     } else if (!/^[a-zA-Z0-9_-]+$/.test(formData.site_name)) {
       newErrors.site_name = '英数字、ハイフン、アンダースコアのみ使用可能です'
+    } else if (/^[-_]|[-_]$/.test(formData.site_name)) {
+      newErrors.site_name = 'ハイフンやアンダースコアで始まる・終わることはできません'
+    } else if (/--/.test(formData.site_name)) {
+      newErrors.site_name = '連続したハイフンは使用できません'
+    } else if (/^\d+$/.test(formData.site_name)) {
+      newErrors.site_name = '数字のみのサイト名は使用できません'
     }
 
-    // Domain validation
-    if (!formData.domain) {
-      newErrors.domain = 'ドメインは必須です'
-    } else if (!/^[a-zA-Z0-9.-]+$/.test(formData.domain)) {
-      newErrors.domain = '有効なドメイン名を入力してください'
+    // Subdomain validation (optional)
+    if (subdomain) {
+      if (subdomain.length > 63) {
+        newErrors.subdomain = 'サブドメインは63文字以内で入力してください'
+      } else if (!/^[a-zA-Z0-9-]+$/.test(subdomain)) {
+        newErrors.subdomain = 'サブドメインは英数字とハイフンのみ使用可能です'
+      } else if (/^-|-$/.test(subdomain)) {
+        newErrors.subdomain = 'ハイフンで始まる・終わることはできません'
+      } else if (/--/.test(subdomain)) {
+        newErrors.subdomain = '連続したハイフンは使用できません'
+      } else if (/^\d+$/.test(subdomain)) {
+        newErrors.subdomain = '数字のみのサブドメインは使用できません'
+      }
     }
 
-    // Database name validation (optional)
-    if (formData.database_name && !/^[a-zA-Z0-9_]+$/.test(formData.database_name)) {
+    // Base domain is always valid (from selection)
+
+    // Database name validation (required)
+    if (!formData.database_name) {
+      newErrors.database_name = 'データベース名は必須です'
+    } else if (formData.database_name.length > 64) {
+      newErrors.database_name = 'データベース名は64文字以内で入力してください'
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.database_name)) {
       newErrors.database_name = '英数字とアンダースコアのみ使用可能です'
+    } else if (/^_|_$/.test(formData.database_name)) {
+      newErrors.database_name = 'アンダースコアで始まる・終わることはできません'
+    } else if (/^\d/.test(formData.database_name)) {
+      newErrors.database_name = '数字で始めることはできません'
+    } else if (MYSQL_RESERVED_WORDS.includes(formData.database_name.toLowerCase())) {
+      newErrors.database_name = 'このデータベース名は予約語のため使用できません'
+    } else if (WP_RESERVED_PREFIXES.some(prefix => formData.database_name.startsWith(prefix))) {
+      newErrors.database_name = 'wp_ で始まるデータベース名は推奨されません'
     }
 
     // PHP version validation
     if (!formData.php_version) {
       newErrors.php_version = 'PHPバージョンは必須です'
+    }
+
+    // Admin user validation
+    if (!formData.admin_user) {
+      newErrors.admin_user = '管理者ユーザー名は必須です'
+    } else if (formData.admin_user.length < 3) {
+      newErrors.admin_user = 'ユーザー名は3文字以上である必要があります'
+    } else if (formData.admin_user.length > 60) {
+      newErrors.admin_user = 'ユーザー名は60文字以内で入力してください'
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.admin_user)) {
+      newErrors.admin_user = '英数字とアンダースコアのみ使用可能です'
+    }
+
+    // Admin password validation
+    if (!formData.admin_password) {
+      newErrors.admin_password = '管理者パスワードは必須です'
+    } else if (formData.admin_password.length < 8) {
+      newErrors.admin_password = 'パスワードは8文字以上である必要があります'
+    } else if (formData.admin_password.length > 100) {
+      newErrors.admin_password = 'パスワードは100文字以内で入力してください'
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.admin_password)) {
+      newErrors.admin_password = '大文字、小文字、数字をそれぞれ1文字以上含める必要があります'
+    }
+
+    // Admin email validation
+    if (!formData.admin_email) {
+      newErrors.admin_email = '管理者メールアドレスは必須です'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.admin_email)) {
+      newErrors.admin_email = '有効なメールアドレスを入力してください'
+    } else if (formData.admin_email.length > 100) {
+      newErrors.admin_email = 'メールアドレスは100文字以内で入力してください'
+    }
+
+    // Site title validation (optional)
+    if (formData.title && formData.title.length > 255) {
+      newErrors.title = 'サイトタイトルは255文字以内で入力してください'
     }
 
     setErrors(newErrors)
@@ -82,24 +214,35 @@ export default function CreateManagedSiteModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (validateForm()) {
-      // Remove empty database_name if not provided
-      const submitData = { ...formData }
-      if (!submitData.database_name) {
-        delete submitData.database_name
+      // Set domain from subdomain + base domain
+      const submitData = { ...formData, domain: fullDomain }
+      if (!submitData.title) {
+        delete submitData.title
       }
       createMutation.mutate(submitData)
     }
   }
 
   const handleClose = () => {
+    // Clear any running step interval
+    if ((createMutation as any).stepInterval) {
+      clearInterval((createMutation as any).stepInterval)
+    }
     setFormData({
       site_name: '',
       domain: '',
       database_name: '',
       php_version: '8.2',
+      admin_user: 'admin',
+      admin_password: '',
+      admin_email: '',
+      title: '',
     })
+    setBaseDomain('kuma8088.com')
+    setSubdomain('')
     setErrors({})
     setSuccess(false)
+    setCurrentStep(0)
     onClose()
   }
 
@@ -142,6 +285,41 @@ export default function CreateManagedSiteModal({
             </Alert>
           )}
 
+          {/* Progress display */}
+          {createMutation.isPending && (
+            <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  サイトを作成中...
+                </span>
+              </div>
+              <div className="space-y-2">
+                {creationSteps.map((step, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center gap-2 text-sm ${
+                      index === currentStep
+                        ? 'text-blue-700 dark:text-blue-300 font-medium'
+                        : index < currentStep
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-gray-400 dark:text-gray-600'
+                    }`}
+                  >
+                    {index < currentStep ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : index === currentStep ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border-2 border-current" />
+                    )}
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Site name */}
           <div className="space-y-2">
             <Label htmlFor="site_name">
@@ -165,39 +343,72 @@ export default function CreateManagedSiteModal({
             </p>
           </div>
 
-          {/* Domain */}
+          {/* Base domain selection */}
           <div className="space-y-2">
-            <Label htmlFor="domain">
-              ドメイン <span className="text-red-500">*</span>
+            <Label htmlFor="base_domain">
+              ベースドメイン <span className="text-red-500">*</span>
+            </Label>
+            <Select
+              value={baseDomain}
+              onValueChange={setBaseDomain}
+              disabled={createMutation.isPending}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BASE_DOMAINS.map((domain) => (
+                  <SelectItem key={domain.value} value={domain.value}>
+                    {domain.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Subdomain (optional) */}
+          <div className="space-y-2">
+            <Label htmlFor="subdomain">
+              サブドメイン（オプション）
             </Label>
             <Input
-              id="domain"
-              value={formData.domain}
-              onChange={(e) =>
-                setFormData({ ...formData, domain: e.target.value })
-              }
-              placeholder="example.com"
+              id="subdomain"
+              value={subdomain}
+              onChange={(e) => setSubdomain(e.target.value)}
+              placeholder="例: blog, test, demo"
               disabled={createMutation.isPending}
-              className={errors.domain ? 'border-red-500' : ''}
+              className={errors.subdomain ? 'border-red-500' : ''}
             />
-            {errors.domain && (
-              <p className="text-sm text-red-600">{errors.domain}</p>
+            {errors.subdomain && (
+              <p className="text-sm text-red-600">{errors.subdomain}</p>
             )}
             <p className="text-sm text-gray-500">
-              サイトにアクセスするためのドメイン名
+              空欄の場合はベースドメインのみ使用されます
             </p>
+          </div>
+
+          {/* Domain preview */}
+          <div className="space-y-2">
+            <Label>作成されるドメイン</Label>
+            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900 border rounded-md">
+              <code className="text-sm font-mono text-blue-600 dark:text-blue-400">
+                {fullDomain}
+              </code>
+            </div>
           </div>
 
           {/* Database name */}
           <div className="space-y-2">
-            <Label htmlFor="database_name">データベース名（オプション）</Label>
+            <Label htmlFor="database_name">
+              データベース名 <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="database_name"
               value={formData.database_name}
               onChange={(e) =>
                 setFormData({ ...formData, database_name: e.target.value })
               }
-              placeholder="wp_database (空欄の場合は自動生成)"
+              placeholder="wp_database"
               disabled={createMutation.isPending}
               className={errors.database_name ? 'border-red-500' : ''}
             />
@@ -205,7 +416,7 @@ export default function CreateManagedSiteModal({
               <p className="text-sm text-red-600">{errors.database_name}</p>
             )}
             <p className="text-sm text-gray-500">
-              空欄の場合はサイト名から自動生成されます
+              英数字とアンダースコアのみ使用可能
             </p>
           </div>
 
@@ -235,6 +446,85 @@ export default function CreateManagedSiteModal({
             {errors.php_version && (
               <p className="text-sm text-red-600">{errors.php_version}</p>
             )}
+          </div>
+
+          {/* Admin user */}
+          <div className="space-y-2">
+            <Label htmlFor="admin_user">
+              WordPress管理者ユーザー名 <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="admin_user"
+              value={formData.admin_user}
+              onChange={(e) =>
+                setFormData({ ...formData, admin_user: e.target.value })
+              }
+              placeholder="admin"
+              disabled={createMutation.isPending}
+              className={errors.admin_user ? 'border-red-500' : ''}
+            />
+            {errors.admin_user && (
+              <p className="text-sm text-red-600">{errors.admin_user}</p>
+            )}
+          </div>
+
+          {/* Admin password */}
+          <div className="space-y-2">
+            <Label htmlFor="admin_password">
+              WordPress管理者パスワード <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="admin_password"
+              type="password"
+              value={formData.admin_password}
+              onChange={(e) =>
+                setFormData({ ...formData, admin_password: e.target.value })
+              }
+              placeholder="8文字以上"
+              disabled={createMutation.isPending}
+              className={errors.admin_password ? 'border-red-500' : ''}
+            />
+            {errors.admin_password && (
+              <p className="text-sm text-red-600">{errors.admin_password}</p>
+            )}
+          </div>
+
+          {/* Admin email */}
+          <div className="space-y-2">
+            <Label htmlFor="admin_email">
+              WordPress管理者メールアドレス <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="admin_email"
+              type="email"
+              value={formData.admin_email}
+              onChange={(e) =>
+                setFormData({ ...formData, admin_email: e.target.value })
+              }
+              placeholder="admin@example.com"
+              disabled={createMutation.isPending}
+              className={errors.admin_email ? 'border-red-500' : ''}
+            />
+            {errors.admin_email && (
+              <p className="text-sm text-red-600">{errors.admin_email}</p>
+            )}
+          </div>
+
+          {/* Site title (optional) */}
+          <div className="space-y-2">
+            <Label htmlFor="title">サイトタイトル（オプション）</Label>
+            <Input
+              id="title"
+              value={formData.title}
+              onChange={(e) =>
+                setFormData({ ...formData, title: e.target.value })
+              }
+              placeholder="サイトのタイトル（空欄の場合はドメイン名）"
+              disabled={createMutation.isPending}
+            />
+            <p className="text-sm text-gray-500">
+              空欄の場合はドメイン名が使用されます
+            </p>
           </div>
 
           {/* Actions */}

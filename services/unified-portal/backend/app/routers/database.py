@@ -2,7 +2,7 @@
 Database management API endpoints.
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import subprocess
@@ -25,6 +25,8 @@ class DatabaseInfo(BaseModel):
     """Database information."""
     name: str
     size_mb: float
+    wordpress_site: Optional[str] = None
+    wordpress_url: Optional[str] = None
 
 
 class DatabaseDetail(DatabaseInfo):
@@ -114,11 +116,41 @@ async def get_database_status():
 @router.get("/list", response_model=List[DatabaseInfo])
 async def list_databases():
     """
-    List all databases in MariaDB.
+    List all databases in MariaDB with WordPress site association.
 
     Returns:
-        List of database information with sizes
+        List of database information with sizes and WordPress site names
     """
+    # WordPress site to database mapping (from wordpress.py WORDPRESS_SITES)
+    # Database naming pattern: wp_{site_name with hyphens converted to underscores}
+    WP_DB_MAPPING = {
+        # fx-trader-life.com domain (4 sites)
+        "wp_fx_trader_life": {"site": "fx-trader-life", "url": "https://fx-trader-life.com"},
+        "wp_fx_trader_life_4line": {"site": "fx-trader-life-4line", "url": "https://4line.fx-trader-life.com"},
+        "wp_fx_trader_life_lp": {"site": "fx-trader-life-lp", "url": "https://lp.fx-trader-life.com"},
+        "wp_fx_trader_life_mfkc": {"site": "fx-trader-life-mfkc", "url": "https://mfkc.fx-trader-life.com"},
+
+        # webmakeprofit.org domain (2 sites)
+        "wp_webmakeprofit": {"site": "webmakeprofit", "url": "https://webmakeprofit.org"},
+        "wp_webmakeprofit_coconala": {"site": "webmakeprofit-coconala", "url": "https://coconala.webmakeprofit.org"},
+
+        # webmakesprofit.com domain (1 site)
+        "wp_webmakesprofit": {"site": "webmakesprofit", "url": "https://webmakesprofit.com"},
+
+        # toyota-phv.jp domain (1 site)
+        "wp_toyota_phv": {"site": "toyota-phv", "url": "https://toyota-phv.jp"},
+
+        # kuma8088.com domain (9 sites)
+        # Note: kuma8088 root site does not exist in WordPress
+        "wp_kuma8088_cameramanual": {"site": "kuma8088-cameramanual / gwpbk492", "url": "https://camera.kuma8088.com"},
+        "wp_kuma8088_elementordemo1": {"site": "kuma8088-elementordemo1", "url": "https://demo1.kuma8088.com"},
+        "wp_kuma8088_elementordemo02": {"site": "kuma8088-elementordemo02", "url": "https://demo2.kuma8088.com"},
+        "wp_kuma8088_elementordemo03": {"site": "kuma8088-elementor-demo-03", "url": "https://demo3.kuma8088.com"},
+        "wp_kuma8088_elementordemo04": {"site": "kuma8088-elementor-demo-04", "url": "https://demo4.kuma8088.com"},
+        "wp_kuma8088_ec02": {"site": "kuma8088-ec02test", "url": "https://ec-test.kuma8088.com"},
+        "wp_kuma8088_test": {"site": "kuma8088-test", "url": "https://test.kuma8088.com"},
+    }
+
     try:
         # Get database list with sizes
         query = """
@@ -142,9 +174,15 @@ async def list_databases():
                     if len(parts) >= 2:
                         db_name = parts[0]
                         size_mb = float(parts[1]) if parts[1] != 'NULL' else 0.0
+
+                        # Check if this database is associated with a WordPress site
+                        wp_info = WP_DB_MAPPING.get(db_name)
+
                         databases.append(DatabaseInfo(
                             name=db_name,
-                            size_mb=size_mb
+                            size_mb=size_mb,
+                            wordpress_site=wp_info["site"] if wp_info else None,
+                            wordpress_url=wp_info["url"] if wp_info else None
                         ))
 
         return databases

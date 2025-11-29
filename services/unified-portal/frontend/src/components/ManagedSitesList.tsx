@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Trash2,
@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   Loader2,
   MoreVertical,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { managedSitesAPI, type ManagedWordPressSite } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -35,12 +37,29 @@ interface ManagedSitesListProps {
   searchQuery: string
 }
 
+// Extract root domain from full domain (e.g., "4line.fx-trader-life.com" -> "fx-trader-life.com")
+function getRootDomain(domain: string): string {
+  const parts = domain.split('.')
+  // Handle common TLDs
+  if (parts.length >= 2) {
+    // Check for two-part TLDs like .co.jp, .com.au
+    const lastTwo = parts.slice(-2).join('.')
+    if (['co.jp', 'com.au', 'co.uk', 'com.br'].includes(lastTwo) && parts.length >= 3) {
+      return parts.slice(-3).join('.')
+    }
+    // Standard TLDs
+    return parts.slice(-2).join('.')
+  }
+  return domain
+}
+
 export default function ManagedSitesList({ searchQuery }: ManagedSitesListProps) {
   const queryClient = useQueryClient()
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedSite, setSelectedSite] = useState<ManagedWordPressSite | null>(null)
   const [deleteDatabase, setDeleteDatabase] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set())
 
   // Query: List managed sites
   const { data: sites, isLoading, error } = useQuery({
@@ -48,6 +67,19 @@ export default function ManagedSitesList({ searchQuery }: ManagedSitesListProps)
     queryFn: () => managedSitesAPI.listSites(),
     refetchInterval: 30000,
   })
+
+  // Toggle domain collapse state
+  const toggleDomain = (domain: string) => {
+    setCollapsedDomains(prev => {
+      const next = new Set(prev)
+      if (next.has(domain)) {
+        next.delete(domain)
+      } else {
+        next.add(domain)
+      }
+      return next
+    })
+  }
 
   // Mutation: Delete site
   const deleteMutation = useMutation({
@@ -77,9 +109,26 @@ export default function ManagedSitesList({ searchQuery }: ManagedSitesListProps)
     site.domain.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Group sites by root domain
+  const groupedSites = useMemo(() => {
+    if (!filteredSites) return new Map<string, ManagedWordPressSite[]>()
+
+    const groups = new Map<string, ManagedWordPressSite[]>()
+    filteredSites.forEach(site => {
+      const rootDomain = getRootDomain(site.domain)
+      if (!groups.has(rootDomain)) {
+        groups.set(rootDomain, [])
+      }
+      groups.get(rootDomain)!.push(site)
+    })
+
+    // Sort groups by domain name
+    return new Map([...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])))
+  }, [filteredSites])
+
   const handleDelete = (site: ManagedWordPressSite) => {
     setSelectedSite(site)
-    setDeleteDatabase(false)
+    setDeleteDatabase(true)  // デフォルトでデータベースも削除
     setDeleteDialogOpen(true)
   }
 
@@ -143,69 +192,97 @@ export default function ManagedSitesList({ searchQuery }: ManagedSitesListProps)
         </Alert>
       )}
 
-      {/* Sites list */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredSites?.map((site) => (
-          <div
-            key={site.id}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-medium text-gray-900 dark:text-white">
-                    {site.site_name}
-                  </h3>
-                  <Badge variant={site.enabled ? 'default' : 'secondary'}>
-                    {site.enabled ? '有効' : '無効'}
-                  </Badge>
-                </div>
-                <a
-                  href={`https://${site.domain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  {site.domain}
-                </a>
+      {/* Sites list grouped by domain */}
+      <div className="space-y-6">
+        {Array.from(groupedSites.entries()).map(([rootDomain, domainSites]) => (
+          <div key={rootDomain} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            {/* Domain header */}
+            <button
+              onClick={() => toggleDomain(rootDomain)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                {collapsedDomains.has(rootDomain) ? (
+                  <ChevronRight className="h-5 w-5 text-gray-500" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-gray-500" />
+                )}
+                <Globe className="h-5 w-5 text-primary" />
+                <span className="font-semibold text-gray-900 dark:text-white">{rootDomain}</span>
+                <Badge variant="outline" className="ml-2">
+                  {domainSites.length} サイト
+                </Badge>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => clearCacheMutation.mutate(site.id)}
-                    disabled={clearCacheMutation.isPending}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    キャッシュクリア
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleDelete(site)}
-                    className="text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    削除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            </button>
 
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                <Settings className="h-4 w-4" />
-                <span>PHP {site.php_version}</span>
+            {/* Sites in this domain */}
+            {!collapsedDomains.has(rootDomain) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-white dark:bg-gray-900">
+                {domainSites.map((site) => (
+                  <div
+                    key={site.id}
+                    className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-medium text-gray-900 dark:text-white">
+                            {site.site_name}
+                          </h3>
+                          <Badge variant={site.enabled ? 'default' : 'secondary'}>
+                            {site.enabled ? '有効' : '無効'}
+                          </Badge>
+                        </div>
+                        <a
+                          href={`https://${site.domain}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          {site.domain}
+                        </a>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => clearCacheMutation.mutate(site.id)}
+                            disabled={clearCacheMutation.isPending}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            キャッシュクリア
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(site)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            削除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <Settings className="h-4 w-4" />
+                        <span>PHP {site.php_version}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                        <span className="font-mono text-xs">{site.database_name}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        作成日: {new Date(site.created_at).toLocaleDateString('ja-JP')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                <span className="font-mono text-xs">{site.database_name}</span>
-              </div>
-              <div className="text-xs text-gray-500">
-                作成日: {new Date(site.created_at).toLocaleDateString('ja-JP')}
-              </div>
-            </div>
+            )}
           </div>
         ))}
       </div>
@@ -231,10 +308,10 @@ export default function ManagedSitesList({ searchQuery }: ManagedSitesListProps)
                         onChange={(e) => setDeleteDatabase(e.target.checked)}
                         className="rounded border-amber-300"
                       />
-                      データベースも削除する
+                      データベースも削除する（推奨）
                     </label>
                     <p className="text-xs text-amber-700 mt-1 ml-6">
-                      データベースを削除すると、全てのコンテンツが完全に失われます
+                      デフォルトでチェックされています。全てのコンテンツが完全に削除されます
                     </p>
                   </div>
                 </div>
