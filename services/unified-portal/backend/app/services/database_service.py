@@ -227,43 +227,17 @@ class DatabaseService:
                 connection.close()
                 print(f"🔍 DEBUG: PyMySQL connection closed")
 
-                # Create dedicated user if requested
-                if db_create.create_user:
-                    username = db_create.username or db_create.database_name
-                    safe_username = self._sanitize_identifier(username)
-                    password = db_create.password or self._generate_password()
+            # Success - log and return
+            print(f"🔍 DEBUG: Database creation completed, preparing response")
+            logger.info(f"Database created: {db_create.database_name} ({db_create.target_system})")
 
-                    # Create user
-                    # Password is passed as string literal - no user input in password variable name
-                    conn.execute(text(f"CREATE USER '{safe_username}'@'%' IDENTIFIED BY '{password}'"))
-
-                    # Grant all privileges on database
-                    conn.execute(text(f"GRANT ALL PRIVILEGES ON `{safe_db_name}`.* TO '{safe_username}'@'%'"))
-                    conn.execute(text("FLUSH PRIVILEGES"))
-                    conn.commit()
-
-                    # Store encrypted credentials
-                    credential = DBCredential(
-                        database_name=db_create.database_name,
-                        username=username,
-                        password_encrypted=self.encryption.encrypt(password),
-                        host=settings.blog_db_host if db_create.target_system == "blog" else settings.mailserver_db_host,
-                        port=settings.blog_db_port if db_create.target_system == "blog" else settings.mailserver_db_port,
-                        target_system=db_create.target_system,
-                    )
-
-                    self.db.add(credential)
-                    self.db.commit()
-
-                logger.info(f"Database created: {db_create.database_name} ({db_create.target_system})")
-
-                return DatabaseResponse(
-                    database_name=db_create.database_name,
-                    charset=db_create.charset,
-                    collation=db_create.collation,
-                    size_mb=0.0,
-                    table_count=0,
-                )
+            return DatabaseResponse(
+                database_name=db_create.database_name,
+                charset=db_create.charset,
+                collation=db_create.collation,
+                size_mb=0.0,
+                table_count=0,
+            )
 
         except SQLAlchemyError as e:
             print(f"🔍 DEBUG: SQLAlchemyError caught: {type(e).__name__} - {e}")

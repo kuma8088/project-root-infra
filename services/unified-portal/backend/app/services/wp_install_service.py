@@ -13,23 +13,23 @@ class WordPressInstallService:
     """Service for installing WordPress sites using wp-cli.
 
     Handles WordPress core installation, plugin installation, and configuration.
-    Uses docker compose exec to run wp-cli commands in WordPress container.
+    Uses docker exec to run wp-cli commands in WordPress container.
     """
+
+    # Docker container name for blog WordPress
+    CONTAINER_NAME = "blog-wordpress"
 
     def __init__(
         self,
-        compose_file: str = "/opt/onprem-infra-system/project-root-infra/services/blog/docker-compose.yml",
-        wp_container: str = "wordpress",
+        wp_container: str = "blog-wordpress",
         wp_user: str = "wordpress",
     ):
         """Initialize WordPress install service.
 
         Args:
-            compose_file: Path to docker-compose.yml
-            wp_container: WordPress container name
+            wp_container: WordPress container name (actual Docker container name)
             wp_user: WordPress database user
         """
-        self.compose_file = compose_file
         self.wp_container = wp_container
         self.wp_user = wp_user
 
@@ -44,8 +44,7 @@ class WordPressInstallService:
             Completed process result
         """
         cmd = [
-            "docker", "compose", "-f", self.compose_file,
-            "exec", "-T", self.wp_container,
+            "docker", "exec", self.wp_container,
             "wp", *args,
             f"--path=/var/www/html/{site_path}",
             "--allow-root"
@@ -107,8 +106,7 @@ class WordPressInstallService:
             logger.info(f"Creating WordPress directory: {site_path}")
             result = subprocess.run(
                 [
-                    "docker", "compose", "-f", self.compose_file,
-                    "exec", "-T", self.wp_container,
+                    "docker", "exec", self.wp_container,
                     "mkdir", "-p", f"/var/www/html/{site_path}"
                 ],
                 capture_output=True,
@@ -173,12 +171,11 @@ class WordPressInstallService:
 
             logger.info("WordPress installed successfully")
 
-            # Step 5: Set correct permissions
+            # Step 5: Set correct permissions (www-data:www-data for plugin updates)
             logger.info("Setting correct permissions...")
             result = subprocess.run(
                 [
-                    "docker", "compose", "-f", self.compose_file,
-                    "exec", "-T", self.wp_container,
+                    "docker", "exec", self.wp_container,
                     "chown", "-R", "www-data:www-data", f"/var/www/html/{site_path}"
                 ],
                 capture_output=True,
@@ -188,6 +185,8 @@ class WordPressInstallService:
 
             if result.returncode != 0:
                 logger.warning(f"Failed to set permissions: {result.stderr}")
+            else:
+                logger.info(f"Permissions set to www-data:www-data for {site_path}")
 
             logger.info(f"WordPress installation complete: {site_path}")
             return True
@@ -277,6 +276,24 @@ class WordPressInstallService:
                 raise ValueError(f"Failed to configure SMTP: {result.stderr}")
 
             logger.info("SMTP configuration complete")
+
+            # Fix permissions after plugin installation (upgrade directory created by wp-cli)
+            logger.info("Fixing permissions after plugin installation...")
+            result = subprocess.run(
+                [
+                    "docker", "exec", self.wp_container,
+                    "chown", "-R", "www-data:www-data", f"/var/www/html/{site_path}"
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                logger.warning(f"Failed to fix permissions: {result.stderr}")
+            else:
+                logger.info(f"Permissions fixed for {site_path}")
+
             return True
 
         except Exception as e:
@@ -295,8 +312,7 @@ class WordPressInstallService:
         try:
             result = subprocess.run(
                 [
-                    "docker", "compose", "-f", self.compose_file,
-                    "exec", "-T", self.wp_container,
+                    "docker", "exec", self.wp_container,
                     "test", "-d", f"/var/www/html/{site_path}"
                 ],
                 capture_output=True,
@@ -321,5 +337,6 @@ def get_wp_install_service() -> WordPressInstallService:
     settings = get_settings()
 
     return WordPressInstallService(
+        wp_container=WordPressInstallService.CONTAINER_NAME,
         wp_user=settings.blog_wp_db_user
     )

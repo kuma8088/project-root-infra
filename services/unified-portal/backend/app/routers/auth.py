@@ -113,6 +113,24 @@ async def get_me(current_user: str = Depends(get_current_user)) -> UserResponse:
     return UserResponse(username=current_user)
 
 
+@router.post("/refresh", response_model=Token)
+async def refresh_token(current_user: str = Depends(get_current_user)) -> Token:
+    """Refresh JWT token - issue a new token with fresh expiration.
+
+    Args:
+        current_user: Current user from valid JWT token.
+
+    Returns:
+        Token: New JWT access token with fresh expiration.
+    """
+    access_token_expires = timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": current_user}, expires_delta=access_token_expires
+    )
+
+    return Token(access_token=access_token)
+
+
 # ============================================================================
 # Admin User Management Endpoints
 # ============================================================================

@@ -531,21 +531,35 @@ def update_managed_wordpress_site(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/managed-sites/{site_id}", status_code=204)
-def delete_managed_wordpress_site(
+@router.delete("/managed-sites/{site_id}")
+async def delete_managed_wordpress_site(
     site_id: int,
-    delete_database: bool = False,
+    delete_database: bool = True,
+    delete_files: bool = True,
+    delete_cloudflare: bool = True,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
     """
-    Delete managed WordPress site.
+    Delete managed WordPress site with full cleanup.
+
+    Deletes:
+    - Cloudflare Tunnel Public Hostname and DNS CNAME record
+    - Nginx configuration
+    - MariaDB database
+    - WordPress files
+    - Portal database record
 
     Args:
         site_id: Site ID
-        delete_database: Also delete the database
+        delete_database: Also delete the MariaDB database (default: True)
+        delete_files: Also delete WordPress files (default: True)
+        delete_cloudflare: Also remove Cloudflare Tunnel + DNS (default: True)
         db: Database session
         current_user: Current authenticated user
+
+    Returns:
+        Deletion results with status for each component
 
     Raises:
         HTTPException: If site not found or deletion fails
@@ -553,7 +567,13 @@ def delete_managed_wordpress_site(
     service = get_wordpress_service(db)
 
     try:
-        service.delete_site(site_id, delete_database=delete_database)
+        result = await service.delete_site(
+            site_id,
+            delete_database=delete_database,
+            delete_files=delete_files,
+            delete_cloudflare=delete_cloudflare,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
