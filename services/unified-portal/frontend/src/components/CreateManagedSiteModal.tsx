@@ -408,7 +408,7 @@ export default function CreateManagedSiteModal({
               onChange={(e) =>
                 setFormData({ ...formData, database_name: e.target.value })
               }
-              placeholder="wp_database"
+              placeholder="mysite_db"
               disabled={createMutation.isPending}
               className={errors.database_name ? 'border-red-500' : ''}
             />
@@ -416,7 +416,7 @@ export default function CreateManagedSiteModal({
               <p className="text-sm text-red-600">{errors.database_name}</p>
             )}
             <p className="text-sm text-gray-500">
-              英数字とアンダースコアのみ使用可能
+              英数字とアンダースコアのみ使用可能（wp_ で始まる名前は非推奨）
             </p>
           </div>
 

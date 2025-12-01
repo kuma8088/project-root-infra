@@ -324,12 +324,23 @@ class WordPressService:
             logger.error(f"Failed to update WordPress site: {e}")
             raise ValueError(f"Failed to update WordPress site: {e}")
 
-    def delete_site(self, site_id: int, delete_database: bool = False) -> None:
-        """Delete WordPress site.
+    async def delete_site(
+        self,
+        site_id: int,
+        delete_database: bool = True,
+        delete_files: bool = True,
+        delete_cloudflare: bool = True,
+    ) -> dict:
+        """Delete WordPress site with full cleanup.
 
         Args:
             site_id: Site ID
-            delete_database: Also delete the database
+            delete_database: Also delete the MariaDB database (default: True)
+            delete_files: Also delete WordPress files (default: True)
+            delete_cloudflare: Also remove Cloudflare Tunnel + DNS (default: True)
+
+        Returns:
+            Dictionary with deletion results
 
         Raises:
             ValueError: If site not found or deletion fails
@@ -338,21 +349,114 @@ class WordPressService:
         if not site:
             raise ValueError(f"Site with ID {site_id} not found")
 
+        results = {
+            "site_name": site.site_name,
+            "domain": site.domain,
+            "nginx_deleted": False,
+            "database_deleted": False,
+            "files_deleted": False,
+            "cloudflare_deleted": False,
+            "db_record_deleted": False,
+            "errors": [],
+        }
+
         try:
-            # Delete Nginx configuration
-            self.nginx.delete_config(f"{site.site_name}.conf")
+            # Step 1: Delete Cloudflare Tunnel + DNS
+            if delete_cloudflare and site.domain:
+                try:
+                    logger.info(f"Step 1: Removing Cloudflare routing for {site.domain}")
+                    # Extract base domain (e.g., kuma8088.com from e2etest.kuma8088.com)
+                    domain_parts = site.domain.split(".")
+                    if len(domain_parts) >= 2:
+                        base_domain = ".".join(domain_parts[-2:])
+                    else:
+                        base_domain = site.domain
 
-            # Test Nginx config and reload
-            if self.nginx.test_config():
-                self.nginx.reload()
-            else:
-                logger.warning("Nginx configuration test failed after site deletion")
+                    cf_result = await self.tunnel.teardown_site_routing(
+                        hostname=site.domain,
+                        domain=base_domain,
+                    )
+                    results["cloudflare_deleted"] = cf_result.get("tunnel_removed") and cf_result.get("dns_removed")
+                    if cf_result.get("errors"):
+                        results["errors"].extend(cf_result["errors"])
+                    logger.info(f"✅ Cloudflare routing removed for {site.domain}")
+                except Exception as e:
+                    error_msg = f"Cloudflare cleanup failed: {e}"
+                    logger.warning(error_msg)
+                    results["errors"].append(error_msg)
 
-            # Delete database record
-            self.db.delete(site)
-            self.db.commit()
+            # Step 2: Delete Nginx configuration
+            try:
+                logger.info(f"Step 2: Deleting Nginx config for {site.site_name}")
+                self.nginx.delete_config(f"{site.site_name}.conf")
+                results["nginx_deleted"] = True
 
-            logger.info(f"WordPress site deleted: {site.site_name}")
+                # Test and reload Nginx
+                if self.nginx.test_config():
+                    self.nginx.reload()
+                    logger.info(f"✅ Nginx config deleted and reloaded")
+                else:
+                    logger.warning("Nginx configuration test failed after deletion")
+            except Exception as e:
+                error_msg = f"Nginx cleanup failed: {e}"
+                logger.warning(error_msg)
+                results["errors"].append(error_msg)
+
+            # Step 3: Delete MariaDB database
+            if delete_database and site.database_name:
+                try:
+                    logger.info(f"Step 3: Deleting database {site.database_name}")
+                    self.db_service.delete_database(site.database_name, "blog")
+                    results["database_deleted"] = True
+                    logger.info(f"✅ Database deleted: {site.database_name}")
+                except Exception as e:
+                    error_msg = f"Database deletion failed: {e}"
+                    logger.warning(error_msg)
+                    results["errors"].append(error_msg)
+
+            # Step 4: Delete WordPress files
+            if delete_files:
+                try:
+                    logger.info(f"Step 4: Deleting WordPress files for {site.site_name}")
+                    wp_path = f"/var/www/html/{site.site_name}"
+                    # Use docker exec to remove files inside container
+                    result = subprocess.run(
+                        [
+                            "docker", "exec", "blog-wordpress",
+                            "rm", "-rf", wp_path,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                    )
+                    if result.returncode == 0:
+                        results["files_deleted"] = True
+                        logger.info(f"✅ WordPress files deleted: {wp_path}")
+                    else:
+                        error_msg = f"File deletion failed: {result.stderr}"
+                        logger.warning(error_msg)
+                        results["errors"].append(error_msg)
+                except Exception as e:
+                    error_msg = f"File deletion failed: {e}"
+                    logger.warning(error_msg)
+                    results["errors"].append(error_msg)
+
+            # Step 5: Delete database record
+            try:
+                logger.info(f"Step 5: Deleting site record from portal database")
+                self.db.delete(site)
+                self.db.commit()
+                results["db_record_deleted"] = True
+                logger.info(f"✅ Site record deleted: {site.site_name}")
+            except Exception as e:
+                self.db.rollback()
+                error_msg = f"Database record deletion failed: {e}"
+                logger.error(error_msg)
+                results["errors"].append(error_msg)
+                raise ValueError(error_msg)
+
+            logger.info(f"WordPress site deletion complete: {site.site_name}")
+            return results
 
         except Exception as e:
             self.db.rollback()

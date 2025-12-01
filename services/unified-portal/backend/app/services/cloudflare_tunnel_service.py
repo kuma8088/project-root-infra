@@ -302,6 +302,45 @@ class CloudflareTunnelService:
             logger.info(f"Created DNS CNAME record: {hostname} → {tunnel_cname}")
             return data["result"]
 
+    async def find_dns_record(self, zone_id: str, hostname: str) -> dict[str, Any] | None:
+        """Find DNS record by hostname.
+
+        Args:
+            zone_id: Cloudflare Zone ID
+            hostname: Full hostname (e.g., e2etest.kuma8088.com)
+
+        Returns:
+            DNS record dict or None if not found
+
+        Raises:
+            httpx.HTTPError: If API request fails
+        """
+        url = f"{self.base_url}/zones/{zone_id}/dns_records?name={hostname}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.api_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if not data.get("success"):
+                errors = data.get("errors", [])
+                raise ValueError(f"Cloudflare API error: {errors}")
+
+            records = data.get("result", [])
+            if records:
+                logger.info(f"Found DNS record for {hostname}: {records[0]['id']}")
+                return records[0]
+
+            logger.info(f"No DNS record found for {hostname}")
+            return None
+
     async def delete_dns_record(self, zone_id: str, record_id: str) -> bool:
         """Delete DNS record.
 
@@ -382,6 +421,69 @@ class CloudflareTunnelService:
 
         except Exception as e:
             logger.error(f"Failed to setup site routing for {hostname}: {e}")
+            raise
+
+    async def teardown_site_routing(
+        self,
+        hostname: str,
+        domain: str = "kuma8088.com",
+    ) -> dict[str, Any]:
+        """Complete teardown for WordPress site routing (Remove Public Hostname + DNS).
+
+        Args:
+            hostname: Full hostname (e.g., e2etest.kuma8088.com)
+            domain: Base domain (default: kuma8088.com)
+
+        Returns:
+            Dictionary with removal results
+
+        Raises:
+            httpx.HTTPError: If API request fails
+        """
+        results = {
+            "tunnel_removed": False,
+            "dns_removed": False,
+            "errors": [],
+        }
+
+        try:
+            # 1. Remove Public Hostname from Tunnel
+            try:
+                await self.remove_public_hostname(hostname)
+                results["tunnel_removed"] = True
+                logger.info(f"✅ Removed Public Hostname: {hostname}")
+            except Exception as e:
+                error_msg = f"Failed to remove tunnel hostname: {e}"
+                logger.warning(error_msg)
+                results["errors"].append(error_msg)
+
+            # 2. Get Zone ID and find DNS record
+            try:
+                zone_id = await self.get_zone_id(domain)
+                dns_record = await self.find_dns_record(zone_id, hostname)
+
+                if dns_record:
+                    # 3. Delete DNS CNAME record
+                    await self.delete_dns_record(zone_id, dns_record["id"])
+                    results["dns_removed"] = True
+                    logger.info(f"✅ Deleted DNS record: {hostname}")
+                else:
+                    logger.info(f"No DNS record to delete for {hostname}")
+                    results["dns_removed"] = True  # Nothing to delete = success
+            except Exception as e:
+                error_msg = f"Failed to delete DNS record: {e}"
+                logger.warning(error_msg)
+                results["errors"].append(error_msg)
+
+            if results["tunnel_removed"] and results["dns_removed"]:
+                logger.info(f"✅ Site routing teardown complete for {hostname}")
+            else:
+                logger.warning(f"⚠️ Site routing teardown partial for {hostname}: {results['errors']}")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to teardown site routing for {hostname}: {e}")
             raise
 
 
