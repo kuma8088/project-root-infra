@@ -81,9 +81,12 @@ services/mailserver/logs-staging/
 services/mailserver/.env.staging
 services/mailserver/config-staging/
 
-# Terraform artifacts
+# Terraform artifacts (plan files can contain sensitive data)
+**/tfplan
+**/*.tfplan
 services/mailserver/terraform/*.tfplan
 services/mailserver/terraform/staging.tfplan
+services/mailserver/terraform/s3-backup/tfplan
 
 # Claude Code settings with sensitive data
 .claude/settings.local.json
@@ -117,3 +120,6 @@ docs/application/blog/claudedocs/xserver-htaccess*.md
 cloudflare/**/.env
 cloudflare/**/node_modules/
 services/unified-portal/frontend/node_modules/
+.claude/
+CLAUDE.md
+AGENTS.md
