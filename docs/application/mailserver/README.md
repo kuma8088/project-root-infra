@@ -132,7 +132,7 @@
 - **ステータス**: ✅ 本番稼働中（安定）
 - **EC2 MX Gateway**: ❌ 廃止済み
 - **Tailscale VPN**: ❌ 不要に
-- Dell側メール受信API実装（FastAPI、172.20.0.100）
+- Dell側メール受信API実装（FastAPI）
 - Cloudflare Email Worker実装（JavaScript、サーバーレス）
 - Cloudflare Tunnel経由HTTPS通信
 
@@ -161,23 +161,23 @@
 
 受信フロー:
 ```
-Internet (Port 25)
-  ↓ MX kuma8088.com
-Cloudflare Email Routing (MX受信、無料)
+Internet (MX)
   ↓
-Cloudflare Email Worker (JavaScript、サーバーレス処理)
-  ↓ HTTPS POST (via Cloudflare Tunnel)
-Dell mailserver-api (FastAPI、172.20.0.100)
-  ↓ LMTP (localhost:2525)
+Cloudflare Email Routing
+  ↓
+Cloudflare Email Worker (JavaScript)
+  ↓ HTTPS POST (via Tunnel)
+mailserver-api (FastAPI)
+  ↓ LMTP
 Dovecot (メールボックス保存)
 ```
 
-送信フロー（変更なし）:
+送信フロー:
 ```
-Mail Client (Port 587)
-  ↓ SMTP Submission
-Dell Postfix (172.20.0.20)
-  ↓ SMTP Relay
+Mail Client (SMTP)
+  ↓
+Postfix
+  ↓ Relay
 SendGrid
   ↓
 Internet

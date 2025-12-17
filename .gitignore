@@ -102,6 +102,16 @@ services/mailserver/docker-compose.yml.phase*.backup
 # Serena MCP configuration
 .serena/
 
+# Internal documentation (contains sensitive system details)
+docs/infra/internal/
+docs/**/internal/
+
+# Detailed design docs with network/port info (keep locally, not public)
+docs/infra/02_design.md
+docs/infra/03_Firewall*.md
+docs/infra/04_installation.md
+docs/infra/staging/
+
 # Blog project sensitive files (NEVER commit these)
 docs/application/blog/claudedocs/xserver-credentials.env
 docs/application/blog/claudedocs/xserver-credentials-vault.yml

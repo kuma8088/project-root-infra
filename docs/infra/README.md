@@ -2,7 +2,7 @@
 
 Dockerコンテナ基盤の構築ドキュメント
 
-**現在の構成**: Dell上でDocker Composeを直接実行（KVM仮想化は未使用）
+**現在の構成**: ワークステーション上でDocker Composeを直接実行
 
 ---
 
@@ -14,67 +14,63 @@ Dockerコンテナ基盤の構築ドキュメント
 |------------|------|
 | [01_requirements.md](01_requirements.md) | インフラ要件定義 |
 | [02_design.md](02_design.md) | システム設計書 |
-| [03_Firewall(RX-600KI).md](03_Firewall(RX-600KI).md) | ファイアウォール設定 |
 | [04_installation.md](04_installation.md) | インストール手順 |
 | [05_testing.md](05_testing.md) | テスト計画 |
-
-### Phase 2: KVM環境構築（構築済み、現在未使用）
-
-| 手順書 | ステータス | 内容 |
-|-------|----------|------|
-| [2.1-rocky-linux-kvm-host-setup.md](procedures/2-kvm/2.1-rocky-linux-kvm-host-setup.md) | ✅ 完了（未使用） | Rocky Linux 9.6 + KVM セットアップ |
-| [2.2-virtual-network-setup.md](procedures/2-kvm/2.2-virtual-network-setup.md) | ✅ 完了（未使用） | AWS VPC相当の5セグメントネットワーク構築 |
-
-**注**: KVM環境は将来的な仮想化用に構築済み。現在はDockerをホスト上で直接実行。
 
 ### Phase 3: Docker環境構築
 
 | 手順書 | ステータス | 内容 |
 |-------|----------|------|
-| [3.1-docker-environment-setup.md](procedures/3-docker/3.1-docker-environment-setup.md) | 🔄 進行中 | Docker CE インストールと基本設定 |
-| [3.2-storage-backup-setup.md](procedures/3-docker/3.2-storage-backup-setup.md) | 🔄 進行中 | ストレージ構成とバックアップ設定 |
-| [3.3-monitoring-security-setup.md](procedures/3-docker/3.3-monitoring-security-setup.md) | 🔄 進行中 | 監視・セキュリティ設定 |
-| [3.4-infrastructure-validation.md](procedures/3-docker/3.4-infrastructure-validation.md) | 🔄 進行中 | インフラ検証テスト |
+| [3.1-docker-environment-setup.md](procedures/3-docker/3.1-docker-environment-setup.md) | ✅ 完了 | Docker CE インストールと基本設定 |
+| [3.2-storage-backup-setup.md](procedures/3-docker/3.2-storage-backup-setup.md) | ✅ 完了 | ストレージ構成とバックアップ設定 |
+| [3.3-monitoring-security-setup.md](procedures/3-docker/3.3-monitoring-security-setup.md) | ✅ 完了 | 監視・セキュリティ設定 |
+| [3.4-infrastructure-validation.md](procedures/3-docker/3.4-infrastructure-validation.md) | ✅ 完了 | インフラ検証テスト |
 
 ---
 
 ## 🌐 Docker Compose サービス構成
 
-**現在の構成**: Dell上でDocker Composeによる8コンテナ稼働
+### Mailserver（9コンテナ）
 
-### Dell Mailserver (Docker Compose)
-
-| サービス | 役割 | ポート | 説明 |
-|---------|------|--------|------|
-| postfix | SMTP送信 | 25, 587 | SendGrid経由でメール送信 |
-| dovecot | IMAP/POP3受信 | 993, 995, 2525 | メール受信・保存（LMTP） |
-| mariadb | データベース | 3306 | ユーザー管理・Roundcube DB |
-| clamav | ウイルススキャン | - | メール添付ファイルスキャン |
-| rspamd | スパムフィルタ | - | スパム判定・学習 |
-| roundcube | Webメール | 8080 | ブラウザメールクライアント |
-| usermgmt | ユーザー管理 | 5001 | Flask管理画面（Phase 11） |
-| nginx | リバースプロキシ | 443 | HTTPS終端・Tailscale証明書 |
+| サービス | 役割 |
+|---------|------|
+| postfix | SMTP送信（SendGrid経由） |
+| dovecot | IMAP/POP3受信・LMTP |
+| mariadb | データベース |
+| clamav | ウイルススキャン |
+| rspamd | スパムフィルタ |
+| roundcube | Webメール |
+| mailserver-api | メール受信API（Cloudflare Worker連携） |
+| usermgmt | ユーザー管理（Flask） |
+| cloudflared | Cloudflare Tunnel |
 
 **ネットワーク構成**:
-- Dell: Docker Composeでホスト上に直接起動
-- EC2: Docker MX Gateway（mailserver-postfixコンテナ）
-- 通信: EC2 → Tailscale VPN → Dell (100.110.222.53:2525)
+- メール受信: Cloudflare Email Worker → Tunnel → mailserver-api → Dovecot LMTP
+- メール送信: Postfix → SendGrid Relay
+- クライアントアクセス: Tailscale VPN経由のみ
 
 詳細: [services/mailserver/README.md](../../services/mailserver/README.md)
 
-### KVM仮想ネットワーク（構築済み、現在未使用）
+### Blog System（5コンテナ）
 
-将来的な仮想化用に5セグメントネットワークを構築済み。詳細は[Phase 2手順書](procedures/2-kvm/2.2-virtual-network-setup.md)参照。
+| サービス | 役割 |
+|---------|------|
+| nginx | リバースプロキシ |
+| wordpress | WordPress + PHP-FPM（17サイト） |
+| mariadb | データベース（17 DB） |
+| redis | Object Cache |
+| cloudflared | Cloudflare Tunnel |
+
+詳細: [docs/application/blog/README.md](../application/blog/README.md)
 
 ---
 
-## 💾 ストレージ構成（Phase 3）
+## 💾 ストレージ構成
 
-| マウントポイント | サイズ | デバイス | 用途 |
-|---------------|-------|---------|------|
-| `/var/lib/docker` | 50GB | SSD | Dockerシステムデータ |
-| `/data/docker` | 3.6TB | HDD | ボリューム・イメージ |
-| `/mnt/backup` | 外付け | HDD | バックアップ |
+| マウントポイント | 用途 |
+|---------------|------|
+| SSD | OS、Docker システム、データベース |
+| HDD | メールデータ、WordPress、バックアップ |
 
 ---
 
@@ -86,7 +82,7 @@ Dockerコンテナ基盤の構築ドキュメント
 
 ```bash
 # 推奨確認手順
-1. WebFetch で公式ドキュメント取得
+1. 公式ドキュメントで仕様確認
 2. 現在の設定確認: docker compose config
 3. テスト環境で検証後、本番適用
 ```
@@ -96,12 +92,11 @@ Dockerコンテナ基盤の構築ドキュメント
 - Docker Compose: https://docs.docker.com/compose/
 - Rocky Linux: https://docs.rockylinux.org/
 
-### 2. SSH ポート設定
+### 2. セキュリティ設定
 
-**絶対禁止**: Port 22の使用
-**現在の構成**: Dell/EC2ともに非標準ポート使用（セキュリティのため）
-
-**注**: セグメント別ポート（2201-2280）はKVM仮想ネットワーク用（現在未使用）
+- SSH: 公開鍵認証のみ、パスワード認証無効
+- ポート: 必要最小限のみ開放（Cloudflare Tunnel活用）
+- アクセス制御: Tailscale VPNで内部サービス保護
 
 ### 3. 手順書実行の原則
 
@@ -111,48 +106,26 @@ Dockerコンテナ基盤の構築ドキュメント
 
 ---
 
-## 📊 フェーズ進捗
-
-| Phase | ステータス | 完了条件 |
-|-------|----------|---------|
-| Phase 1 | ✅ 完了 | Minimal KVM環境 |
-| Phase 2 | ✅ 完了 | 5セグメントネットワーク稼働 |
-| Phase 3 | 🔄 進行中 | Docker基盤構築完了 |
-| Phase 4-5 | 未着手 | Terraform統合 |
-| Phase 6+ | 一部進行中 | サービスデプロイ（Mailserver稼働中） |
-
----
-
 ## 🔧 よく使うコマンド
 
 ### Docker操作
 
 ```bash
-# コンテナ管理（Mailserver）
+# Mailserver
 cd /opt/onprem-infra-system/project-root-infra/services/mailserver
 docker compose ps
 docker compose logs -f <service-name>
 docker compose restart <service-name>
 
+# Blog
+cd /opt/onprem-infra-system/project-root-infra/services/blog
+docker compose ps
+docker compose logs -f <service-name>
+
 # システム情報
 docker system df
 docker volume ls
-
-# ログ確認
-sudo journalctl -u docker -f
 ```
-
-### KVM操作（現在未使用）
-
-```bash
-# ネットワーク確認
-sudo virsh net-list --all
-
-# VM操作
-sudo virsh list --all
-```
-
-詳細なコマンドとオプションは[services/mailserver/README.md](../../services/mailserver/README.md)を参照してください。
 
 ---
 
@@ -160,23 +133,21 @@ sudo virsh list --all
 
 | 問題 | 原因 | 対処 |
 |-----|------|-----|
-| Dockerコンテナ起動失敗 | ストレージ/パーミッション問題 | daemon.json検証、SELinuxコンテキスト確認 |
+| コンテナ起動失敗 | ストレージ/パーミッション | daemon.json検証、SELinuxコンテキスト確認 |
 | ネットワーク接続失敗 | Dockerネットワーク設定 | docker network inspect確認 |
 | ディスク容量不足 | ボリューム/イメージ肥大化 | docker system prune実行 |
 | リソース枯渇 | メモリ/CPU/ディスク不足 | docker stats確認、不要コンテナ停止 |
 
-詳細なトラブルシューティングは各手順書を参照してください。
+詳細なトラブルシューティングは [services/mailserver/troubleshoot/README.md](../../services/mailserver/troubleshoot/README.md) を参照。
 
 ---
 
 ## 🌩️ 将来のAWS移行
 
-- **Terraform**: KVMリソースをTerraform構成としてエクスポート
-- **AWS MGN**: Application Migration Serviceによる移行
-- **段階的移行**: 開発(Dell) → ステージング(AWS) → 本番(AWS Multi-AZ)
+- **段階的移行**: 開発(オンプレ) → ステージング(AWS) → 本番(AWS Multi-AZ)
+- **IaC**: Terraform による Infrastructure as Code
+- **移行ツール**: AWS Application Migration Service
 
 ---
 
 **Repository Type**: ドキュメント駆動型インフラリポジトリ
-**Main Deliverables**: 実行可能な手順書（Bash コマンド）
-**Validation Method**: 実際のインフラ上での実行と検証
