@@ -25,7 +25,7 @@
 
 ### 全体構成図
 
-![Dell Services Architecture](./architecture.svg?v=2)
+![Dell Services Architecture](./architecture.png)
 
 ### メールサーバー
 
